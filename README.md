@@ -6,7 +6,7 @@
 
 **Free, open-source clipboard history for macOS, with drag-to-reorder pins and an encrypted vault for passwords and API keys.**
 
-[Website](https://pankaj1980patel.github.io/pastora/) · [Download](https://github.com/pankaj1980patel/pastora/releases) · [Build from source](#build-from-source) · [Roadmap](#roadmap)
+[Website](https://pankaj1980patel.github.io/pastora/) · [Download](https://github.com/pankaj1980patel/pastora/releases/latest) · [Build from source](#build-from-source) · [Roadmap](#roadmap)
 
 ![macOS](https://img.shields.io/badge/macOS-11%2B-black?logo=apple)
 ![Rust](https://img.shields.io/badge/Rust-Tauri%202-orange?logo=rust)
@@ -62,9 +62,12 @@ Your data is stored in a SQLite database at `~/Library/Application Support/com.p
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/pankaj1980patel/pastora/releases). Open it and drag **Pastora** to Applications.
-
-> The app isn't notarized yet. The first time you open it, right-click it and choose **Open**.
+1. Download **`Pastora_<version>_macOS_universal.dmg`** from the [latest release](https://github.com/pankaj1980patel/pastora/releases/latest). It's one download for both Apple Silicon and Intel Macs, macOS 11+.
+2. Open the DMG and drag **Pastora** onto **Applications**.
+3. Pastora isn't notarized by Apple yet, so macOS blocks it the first time. Either:
+   - open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Pastora, or
+   - run `xattr -dr com.apple.quarantine /Applications/Pastora.app` in Terminal.
+4. Click the paw icon in the menu bar, or press **⌘⇧V**.
 
 ## Build from source
 
