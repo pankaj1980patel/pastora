@@ -9,6 +9,7 @@ mod settings;
 mod shortcuts;
 mod state;
 mod tray;
+mod updates;
 mod vault;
 mod watcher;
 mod window;
@@ -54,6 +55,7 @@ pub fn run() {
 
             watcher::spawn(handle.clone());
             actions::spawn_background(handle.clone());
+            updates::spawn(handle.clone());
 
             if !settings.onboarded {
                 window::show_popup(&handle, None);
@@ -111,6 +113,10 @@ pub fn run() {
             commands::import_data,
             commands::reset_all,
             commands::finish_onboarding,
+            commands::update_status,
+            commands::check_updates_now,
+            commands::dismiss_update,
+            commands::open_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Pastora")

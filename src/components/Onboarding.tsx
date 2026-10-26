@@ -24,8 +24,35 @@ export function Onboarding({ settings }: { settings: Settings }) {
         </div>
       </div>
       <div className="mt-4 space-y-3 text-[0.92rem]">
+        {isMac && (
+          <div className={`rounded-lg border p-3 ${trusted ? "border-green-500/30 bg-green-500/5" : "border-indigo-500/30 bg-indigo-500/5"}`}>
+            <Step icon="paste" title="1. Let Pastora paste for you">
+              Pastora needs macOS <b>Accessibility</b> permission to press ⌘V in the app you were using. Without it, items are only copied.
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {trusted ? (
+                  <span className="inline-flex items-center gap-1 font-medium text-green-600">
+                    <Icon name="check" size={14} /> Allowed
+                  </span>
+                ) : (
+                  <>
+                    <Button variant="primary" onClick={() => api.requestAccessibility()}>
+                      Allow Accessibility…
+                    </Button>
+                    <span className="text-[0.8rem] text-neutral-500">
+                      Turn on <b>Pastora</b> in the list. Already on?{" "}
+                      <button className="text-indigo-500 hover:underline" onClick={() => api.resetAccessibility()}>
+                        Reset
+                      </button>{" "}
+                      and turn it on again.
+                    </span>
+                  </>
+                )}
+              </div>
+            </Step>
+          </div>
+        )}
         <Step icon="clipboard" title="History">
-          Everything you copy is saved. Open it anytime with <Kbd>{displayAccelerator(sc.openPopup)}</Kbd>.
+          Everything you copy is saved. Open it anytime with <Kbd>{displayAccelerator(sc.openPopup)}</Kbd>, then click an item to paste it.
         </Step>
         <Step icon="pin" title="Pins">
           Keep snippets you use often. Drag to reorder. <Kbd>{displayAccelerator(sc.openPins)}</Kbd>
@@ -33,28 +60,17 @@ export function Onboarding({ settings }: { settings: Settings }) {
         <Step icon="shield" title="Secure Clips">
           Passwords, API keys and cards, encrypted{isMac ? " and unlocked with Touch ID" : ""}. <Kbd>{displayAccelerator(sc.openSecure)}</Kbd>
         </Step>
-        {isMac && (
-          <Step icon="paste" title="Paste automatically">
-            To paste into the app you were using, Pastora needs Accessibility permission.
-            <div className="mt-1.5">
-              {trusted ? (
-                <span className="inline-flex items-center gap-1 text-green-600">
-                  <Icon name="check" size={14} /> Allowed
-                </span>
-              ) : (
-                <Button onClick={() => api.requestAccessibility()}>Allow in System Settings…</Button>
-              )}
-            </div>
-          </Step>
-        )}
       </div>
       <div className="mt-auto flex items-center justify-between pt-4">
         <button className="text-[0.85rem] text-neutral-500 hover:underline" onClick={() => api.openSettings()}>
           Open Settings
         </button>
-        <Button variant="primary" onClick={() => api.finishOnboarding()}>
-          Get started
-        </Button>
+        <div className="flex gap-2">
+          {isMac && !trusted && <Button onClick={() => api.finishOnboarding()}>Skip for now</Button>}
+          <Button variant="primary" disabled={isMac && !trusted} onClick={() => api.finishOnboarding()}>
+            {isMac && !trusted ? "Allow paste first" : "Get started"}
+          </Button>
+        </div>
       </div>
     </div>
   );

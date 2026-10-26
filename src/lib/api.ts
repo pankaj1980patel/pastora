@@ -117,6 +117,19 @@ export interface Settings {
   showSourceApp: boolean;
   relativeTime: boolean;
   onboarded: boolean;
+  checkUpdates: boolean;
+}
+
+export interface UpdateInfo {
+  version: string;
+  url: string;
+  notesUrl: string;
+}
+
+export interface UpdateStatus {
+  current: string;
+  update: UpdateInfo | null;
+  dismissed: boolean;
 }
 
 export interface AppInfo {
@@ -177,6 +190,10 @@ export const api = {
   accessibilityStatus: () => invoke<boolean>("accessibility_status"),
   requestAccessibility: () => invoke<boolean>("request_accessibility"),
   resetAccessibility: () => invoke<boolean>("reset_accessibility"),
+  updateStatus: () => invoke<UpdateStatus>("update_status"),
+  checkUpdatesNow: () => invoke<UpdateStatus>("check_updates_now"),
+  dismissUpdate: (version: string) => invoke<void>("dismiss_update", { version }),
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
   openDataFolder: () => invoke<void>("open_data_folder"),
   openWebsite: () => invoke<void>("open_website"),
   openSettings: (section?: string) => invoke<void>("open_settings", { section: section ?? null }),

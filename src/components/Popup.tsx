@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, Clip, Settings } from "../lib/api";
 import { useEvent } from "../lib/hooks";
 import { isMac, isMod, keys as keyText } from "../lib/shortcut";
+import { Banners } from "./Banners";
 import { HistoryList } from "./HistoryList";
 import { Icon } from "./Icon";
 import { Onboarding } from "./Onboarding";
@@ -139,6 +140,8 @@ export function Popup({ settings }: { settings: Settings }) {
           ))}
         </div>
       </div>
+
+      <Banners settings={settings} />
 
       <div className="relative flex min-h-0 flex-1 flex-col border-t border-black/5 dark:border-white/10">
         {tab === "history" && (

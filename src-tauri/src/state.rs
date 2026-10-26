@@ -40,6 +40,8 @@ pub struct AppState {
     pub shortcut_map: Mutex<HashMap<u32, Action>>,
     pub pending_sequence: Mutex<Option<PendingSequence>>,
     pub tray: Mutex<Option<crate::tray::TrayHandles>>,
+    /// Newer release found by the update check.
+    pub update: Mutex<Option<crate::updates::UpdateInfo>>,
 }
 
 impl AppState {
@@ -58,6 +60,7 @@ impl AppState {
             shortcut_map: Mutex::new(HashMap::new()),
             pending_sequence: Mutex::new(None),
             tray: Mutex::new(None),
+            update: Mutex::new(None),
         }
     }
 

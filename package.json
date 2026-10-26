@@ -1,7 +1,7 @@
 {
   "name": "pastora",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pastora: free, open-source clipboard manager for Mac with history, drag-to-reorder pins and Touch ID secure clips.",
   "license": "MIT",
   "homepage": "https://pankaj1980patel.github.io/pastora/",

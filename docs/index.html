@@ -46,7 +46,7 @@
     "codeRepository": "https://github.com/pankaj1980patel/pastora",
     "image": "https://pankaj1980patel.github.io/pastora/assets/og-image.png",
     "license": "https://opensource.org/licenses/MIT",
-    "softwareVersion": "0.1.0",
+    "softwareVersion": "0.1.1",
     "fileSize": "10MB",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "featureList": [
@@ -68,7 +68,7 @@
     "@type": "FAQPage",
     "mainEntity": [
       { "@type": "Question", "name": "Is Pastora free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Pastora is free and open source under the MIT license." } },
-      { "@type": "Question", "name": "Does Pastora send my clipboard anywhere?", "acceptedAnswer": { "@type": "Answer", "text": "No. Pastora makes no network requests. Your history, pins and secure clips are stored only on your Mac." } },
+      { "@type": "Question", "name": "Does Pastora send my clipboard anywhere?", "acceptedAnswer": { "@type": "Answer", "text": "No. Your history, pins and secure clips are stored only on your computer. The only network request Pastora makes is a once-a-day check on GitHub for a new version, which you can turn off." } },
       { "@type": "Question", "name": "How are passwords in Secure Clips protected?", "acceptedAnswer": { "@type": "Answer", "text": "Each entry is encrypted with XChaCha20-Poly1305 using a vault key protected by your master password (Argon2id). You can unlock with Touch ID, and copied secrets are cleared from the clipboard automatically." } },
       { "@type": "Question", "name": "Can I reorder pinned items?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Drag pins up or down, or press Option+Up / Option+Down." } },
       { "@type": "Question", "name": "Does Pastora work on Windows and Linux?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Windows (.exe / .msi) and Linux (.AppImage / .deb) builds are on the releases page, with clipboard history, pins, image clips, paste and Secure Clips with your master password. Fingerprint unlock is Mac-only for now." } }
@@ -189,6 +189,7 @@
       <section id="screenshots">
         <h2>See it in action</h2>
         <div class="shots">
+          <figure class="wide"><img src="assets/screenshots/menubar.webp" width="700" height="620" loading="lazy" alt="Pastora lives in the menu bar: click the paw icon and the clipboard popup drops down" /><figcaption>Lives in your menu bar: click the 🐾 icon or press ⌘⇧V</figcaption></figure>
           <figure><img src="assets/screenshots/history.webp" width="520" height="640" loading="lazy" alt="Clipboard history with source app and time" /><figcaption>History, with the app and time of every copy</figcaption></figure>
           <figure><img src="assets/screenshots/image-preview.webp" width="520" height="640" loading="lazy" alt="Image clip with preview and Save button" /><figcaption>Images and screenshots, with preview and Save</figcaption></figure>
           <figure><img src="assets/screenshots/pins.webp" width="520" height="640" loading="lazy" alt="Pinned snippets you can drag to reorder" /><figcaption>Pins you can drag to reorder</figcaption></figure>
@@ -206,14 +207,14 @@
           <tr><th>Master password</th><td>Argon2id key derivation (64 MiB, 3 passes)</td></tr>
           <tr><th>Touch ID</th><td>The vault key is stored in the macOS Keychain and released only after a fingerprint check</td></tr>
           <tr><th>Clipboard safety</th><td>Copied secrets are marked concealed, kept off Universal Clipboard, and cleared after 30 seconds</td></tr>
-          <tr><th>Network</th><td>None. No accounts, no cloud, no telemetry</td></tr>
+          <tr><th>Network</th><td>No accounts, no cloud, no telemetry. Only a daily update check on GitHub, which you can turn off</td></tr>
         </table>
       </section>
 
       <section id="faq">
         <h2>Frequently asked questions</h2>
         <details><summary>Is Pastora free?</summary><p>Yes. Pastora is free and open source under the MIT license.</p></details>
-        <details><summary>Does Pastora send my clipboard anywhere?</summary><p>No. Pastora makes no network requests. Your history, pins and secure clips are stored only on your Mac.</p></details>
+        <details><summary>Does Pastora send my clipboard anywhere?</summary><p>No. Your history, pins and secure clips are stored only on your computer. The only network request Pastora makes is a once-a-day check on GitHub for a new version, which you can turn off in Settings.</p></details>
         <details><summary>How are passwords in Secure Clips protected?</summary><p>Each entry is encrypted with XChaCha20-Poly1305 using a vault key protected by your master password (Argon2id). You can unlock with Touch ID, and copied secrets are cleared from the clipboard automatically.</p></details>
         <details><summary>Can I reorder pinned items?</summary><p>Yes. Drag pins up or down, or press <kbd>⌥↑</kbd> / <kbd>⌥↓</kbd>.</p></details>
         <details><summary>How is Pastora different from Maccy or Paste?</summary><p>Pastora combines clipboard history and pins with a Touch ID protected vault for credentials, so you don't need a separate app for the passwords and API keys you paste every day.</p></details>

@@ -676,3 +676,31 @@ pub fn finish_onboarding(app: AppHandle) -> Res<Settings> {
     s.onboarded = true;
     apply_settings(&app, s)
 }
+
+// ---------------- Updates ----------------
+
+#[tauri::command]
+pub fn update_status(app: AppHandle) -> crate::updates::UpdateStatus {
+    crate::updates::status(&app)
+}
+
+#[tauri::command]
+pub async fn check_updates_now(app: AppHandle) -> Res<crate::updates::UpdateStatus> {
+    crate::updates::check(&app).map_err(|e| format!("Couldn't check for updates: {e}"))?;
+    Ok(crate::updates::status(&app))
+}
+
+#[tauri::command]
+pub fn dismiss_update(app: AppHandle, version: String) {
+    crate::updates::dismiss(&app, &version);
+}
+
+/// Opens a Pastora download or release page in the browser.
+#[tauri::command]
+pub fn open_url(url: String) -> Res<()> {
+    if !url.starts_with("https://github.com/pankaj1980patel/pastora/") {
+        return Err("Not a Pastora link".into());
+    }
+    platform::open_path(std::path::Path::new(&url));
+    Ok(())
+}

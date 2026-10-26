@@ -27,6 +27,8 @@ Pastora runs in your Mac's menu bar and remembers everything you copy. Press **�
 
 ## Screenshots
 
+<p align="center"><img src="docs/assets/screenshots/menubar.webp" width="560" alt="Pastora lives in the menu bar: click the paw icon and the clipboard popup drops down" /><br /><sub>Lives in your menu bar: click the 🐾 icon (or press ⌘⇧V) and your clipboard drops down.</sub></p>
+
 | History | Image preview | Pins |
 |:---:|:---:|:---:|
 | <img src="docs/assets/screenshots/history.webp" width="260" alt="Clipboard history with source app and time" /> | <img src="docs/assets/screenshots/image-preview.webp" width="260" alt="Image clip with preview and Save button" /> | <img src="docs/assets/screenshots/pins.webp" width="260" alt="Pinned snippets you can drag to reorder" /> |
@@ -74,7 +76,7 @@ Pastora runs in your Mac's menu bar and remembers everything you copy. Press **�
 | Master password | Argon2id (64 MiB, 3 passes) derives the key that wraps the vault key. |
 | Touch ID | After biometric verification the vault key is read from the macOS Keychain. Your master password is still requested periodically. |
 | Memory | The decrypted key stays in Rust memory and is zeroized when the vault locks. The UI only receives secret values when you copy or reveal one. |
-| Network | None. Pastora makes no network requests and has no telemetry. |
+| Network | One request a day to GitHub to check for a new version (turn it off in Settings → General). Your clipboard is never sent anywhere, and there is no telemetry. |
 
 Your data is stored in a SQLite database at `~/Library/Application Support/com.pastora.app/`, and it is kept across restarts.
 

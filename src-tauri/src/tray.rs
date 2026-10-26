@@ -6,8 +6,15 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Wry};
 
 pub struct TrayHandles {
+    menu: Menu<Wry>,
     pause: CheckMenuItem<Wry>,
     autostart: CheckMenuItem<Wry>,
+    /// "Allow Accessibility…" (macOS, only while paste isn't allowed).
+    access: MenuItem<Wry>,
+    /// "Update available…" (only while a newer release exists).
+    update: MenuItem<Wry>,
+    shown_access: bool,
+    shown_update: bool,
 }
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
@@ -21,6 +28,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
     let autostart = CheckMenuItem::with_id(app, "autostart", "Start at Login", true, s.launch_at_login, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Pastora", true, Some("CmdOrCtrl+Q"))?;
+    let access = MenuItem::with_id(app, "access", "Allow Accessibility for Paste…", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", "Update Available…", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[
@@ -68,22 +77,48 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 s.launch_at_login = !s.launch_at_login;
                 let _ = crate::commands::apply_settings(app, s);
             }
+            "access" => {
+                crate::platform::accessibility_trusted(true);
+                crate::platform::open_accessibility_settings();
+            }
+            "update" => {
+                if let Some(u) = state(app).update.lock().unwrap().clone() {
+                    crate::platform::open_path(std::path::Path::new(&u.url));
+                }
+            }
             "quit" => app.exit(0),
             _ => {}
         })
         .build(app)?;
 
-    *state(app).tray.lock().unwrap() = Some(TrayHandles { pause, autostart });
+    *state(app).tray.lock().unwrap() =
+        Some(TrayHandles { menu, pause, autostart, access, update, shown_access: false, shown_update: false });
+    refresh(app);
     Ok(())
 }
 
-/// Syncs the check marks with the current settings.
+/// Syncs the check marks with the current settings, and shows the "Allow Accessibility"
+/// and "Update available" items only when they apply.
 pub fn refresh(app: &AppHandle) {
     let st = state(app);
     let s = st.settings();
-    let tray = st.tray.lock().unwrap();
-    if let Some(t) = tray.as_ref() {
+    let update = st.update.lock().unwrap().clone();
+    let need_access = cfg!(target_os = "macos") && s.auto_paste && !crate::platform::accessibility_trusted(false);
+    let mut tray = st.tray.lock().unwrap();
+    if let Some(t) = tray.as_mut() {
         let _ = t.pause.set_checked(s.is_paused(crate::db::now_ms()));
         let _ = t.autostart.set_checked(s.launch_at_login);
+        if let Some(u) = &update {
+            let _ = t.update.set_text(format!("Update Available: Pastora {}…", u.version));
+        }
+        // Both optional items sit at the top of the menu: update first, then accessibility.
+        if t.shown_access != need_access {
+            let _ = if need_access { t.menu.insert(&t.access, if t.shown_update { 1 } else { 0 }) } else { t.menu.remove(&t.access) };
+            t.shown_access = need_access;
+        }
+        if t.shown_update != update.is_some() {
+            let _ = if update.is_some() { t.menu.prepend(&t.update) } else { t.menu.remove(&t.update) };
+            t.shown_update = update.is_some();
+        }
     }
 }

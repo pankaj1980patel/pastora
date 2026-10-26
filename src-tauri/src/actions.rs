@@ -131,6 +131,7 @@ pub fn spawn_background(app: AppHandle) {
         .spawn(move || {
             let mut last_wall = SystemTime::now();
             let mut was_paused = state(&app).settings().is_paused(now_ms());
+            let mut was_trusted = platform::accessibility_trusted(false);
             loop {
                 std::thread::sleep(Duration::from_secs(2));
                 let st = state(&app);
@@ -156,6 +157,14 @@ pub fn spawn_background(app: AppHandle) {
                     let _ = app.emit("settings-changed", &s);
                 }
                 was_paused = paused;
+
+                // Keep the tray's "Allow Accessibility" item in step with System Settings.
+                let trusted = platform::accessibility_trusted(false);
+                if trusted != was_trusted {
+                    tray::refresh(&app);
+                    let _ = app.emit("accessibility-changed", trusted);
+                }
+                was_trusted = trusted;
             }
         })
         .expect("spawn background");

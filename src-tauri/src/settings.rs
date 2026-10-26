@@ -73,6 +73,8 @@ pub struct Settings {
     pub relative_time: bool,
 
     pub onboarded: bool,
+    /// Check GitHub once a day for a newer release.
+    pub check_updates: bool,
 }
 
 impl Default for Settings {
@@ -112,6 +114,7 @@ impl Default for Settings {
             show_source_app: true,
             relative_time: true,
             onboarded: false,
+            check_updates: true,
         }
     }
 }

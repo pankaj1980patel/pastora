@@ -1,6 +1,6 @@
 [package]
 name = "pastora"
-version = "0.1.0"
+version = "0.1.1"
 description = "Clipboard manager for Mac with history, pins and Touch ID secure clips"
 edition = "2021"
 license = "MIT"
@@ -39,6 +39,7 @@ data-encoding = "2"
 keyring = { version = "3", features = ["apple-native"] }
 uuid = { version = "1", features = ["v4"] }
 log = "0.4"
+ureq = { version = "2", features = ["json"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
