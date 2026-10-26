@@ -1,3 +1,4 @@
+import logo from "../assets/logo.png";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import { ReactNode, useEffect, useState } from "react";
 import { api, AppInfo, errorText, IgnoredApp, Settings, Shortcuts, VaultStatus } from "../lib/api";
@@ -41,9 +42,7 @@ export function SettingsWindow({ settings }: { settings: Settings }) {
     <div className="flex h-screen text-[13px] text-neutral-900 dark:text-neutral-100">
       <nav className="w-52 shrink-0 border-r border-black/5 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
         <div className="mb-4 flex items-center gap-2 px-2 pt-1">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-b from-indigo-500 to-violet-500 text-white">
-            <Icon name="clipboard" size={15} />
-          </div>
+          <img src={logo} className="h-7 w-7" alt="" />
           <span className="text-[15px] font-semibold">Pastora</span>
         </div>
         {SECTIONS.map((s) => (
@@ -700,9 +699,7 @@ function About() {
   }, []);
   return (
     <div className="flex flex-col items-center gap-2 py-8 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-b from-indigo-500 to-violet-500 text-white shadow-lg">
-        <Icon name="clipboard" size={32} />
-      </div>
+      <img src={logo} className="h-20 w-20" alt="Pastora" />
       <div className="text-xl font-semibold">Pastora</div>
       <div className="text-neutral-500">Version {info?.version}</div>
       <p className="max-w-sm text-neutral-500">

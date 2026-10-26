@@ -15,7 +15,7 @@
 
 </div>
 
-Pastora runs in your Mac's menu bar and remembers everything you copy. Press **⌘⇧V** to search your history, paste a pinned snippet, or unlock a password with **Touch ID**. It's built with Rust and Tauri, so the app is only about 7 MB, starts at login, and keeps everything on your device.
+Pastora runs in your Mac's menu bar and remembers everything you copy. Press **⌘⇧V** to search your history, paste a pinned snippet, or unlock a password with **Touch ID**. It's built with Rust and Tauri, so the app is under 10 MB, starts at login, and keeps everything on your device.
 
 ## Features
 

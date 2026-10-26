@@ -1,3 +1,4 @@
+import logo from "../assets/logo.png";
 import { useEffect, useState } from "react";
 import { api, Settings } from "../lib/api";
 import { displayAccelerator } from "../lib/shortcut";
@@ -16,9 +17,7 @@ export function Onboarding({ settings }: { settings: Settings }) {
   return (
     <div className="absolute inset-0 z-50 flex flex-col overflow-y-auto bg-white/95 p-5 dark:bg-neutral-900/95">
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-b from-indigo-500 to-violet-500 text-white">
-          <Icon name="clipboard" size={18} />
-        </div>
+        <img src={logo} className="h-10 w-10" alt="" />
         <div>
           <div className="text-[1.15rem] font-semibold">Welcome to Pastora</div>
           <div className="text-[0.85rem] text-neutral-500">Your clipboard, with a memory and a safe.</div>
