@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pastora: Free Clipboard Manager for Mac with Touch ID Vault</title>
+  <meta name="description" content="Pastora is a free, open-source clipboard manager for macOS. Searchable clipboard history, drag-to-reorder pins, and Touch ID–protected secure clips for passwords and API keys. 100% offline." />
+  <meta name="keywords" content="clipboard manager mac, macos clipboard history, clipboard app, copy paste history mac, touch id password vault, secure clipboard, open source clipboard manager, maccy alternative, paste app alternative, snippet manager mac" />
+  <meta name="author" content="pankaj1980patel" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="theme-color" content="#6366f1" />
+  <link rel="canonical" href="https://pankaj1980patel.github.io/pastora/" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Pastora" />
+  <meta property="og:title" content="Pastora: Clipboard Manager for Mac with Touch ID Secure Clips" />
+  <meta property="og:description" content="Clipboard history, drag-to-reorder pins and an encrypted Touch ID vault for passwords. Free, open source, offline." />
+  <meta property="og:url" content="https://pankaj1980patel.github.io/pastora/" />
+  <meta property="og:image" content="https://pankaj1980patel.github.io/pastora/assets/og-image.png" />
+  <meta property="og:image:width" content="1280" />
+  <meta property="og:image:height" content="640" />
+  <meta property="og:image:alt" content="Pastora: clipboard manager for Mac" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Pastora: Clipboard Manager for Mac" />
+  <meta name="twitter:description" content="Clipboard history, pins and Touch ID secure clips. Free & open source." />
+  <meta name="twitter:image" content="https://pankaj1980patel.github.io/pastora/assets/og-image.png" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Pastora",
+    "applicationCategory": "UtilitiesApplication",
+    "applicationSubCategory": "Clipboard manager",
+    "operatingSystem": "macOS 11 or later",
+    "description": "Free, open-source clipboard manager for macOS with searchable history, drag-to-reorder pins and Touch ID protected secure clips for credentials.",
+    "url": "https://pankaj1980patel.github.io/pastora/",
+    "downloadUrl": "https://github.com/pankaj1980patel/pastora/releases",
+    "codeRepository": "https://github.com/pankaj1980patel/pastora",
+    "image": "https://pankaj1980patel.github.io/pastora/assets/og-image.png",
+    "license": "https://opensource.org/licenses/MIT",
+    "softwareVersion": "0.1.0",
+    "fileSize": "7.5MB",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "featureList": [
+      "Clipboard history for text, images and files",
+      "Searchable history with keyboard navigation",
+      "Pins with drag-and-drop reordering",
+      "Encrypted secure clips unlocked with Touch ID",
+      "TOTP two-factor codes",
+      "Password generator",
+      "Auto-clear copied passwords",
+      "Customizable global keyboard shortcuts",
+      "Start at login"
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      { "@type": "Question", "name": "Is Pastora free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Pastora is free and open source under the MIT license." } },
+      { "@type": "Question", "name": "Does Pastora send my clipboard anywhere?", "acceptedAnswer": { "@type": "Answer", "text": "No. Pastora makes no network requests. Your history, pins and secure clips are stored only on your Mac." } },
+      { "@type": "Question", "name": "How are passwords in Secure Clips protected?", "acceptedAnswer": { "@type": "Answer", "text": "Each entry is encrypted with XChaCha20-Poly1305 using a vault key protected by your master password (Argon2id). You can unlock with Touch ID, and copied secrets are cleared from the clipboard automatically." } },
+      { "@type": "Question", "name": "Can I reorder pinned items?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Drag pins up or down, or press Option+Up / Option+Down." } },
+      { "@type": "Question", "name": "Will Pastora be available for Windows and Linux?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Linux and Windows versions are on the roadmap, built from the same Rust and Tauri codebase." } }
+    ]
+  }
+  </script>
+
+  <style>
+    :root { --bg:#0f0e1a; --fg:#eceaff; --muted:#a6a3c9; --accent:#7c7cf8; --card:#1a1930; --line:#2b2948; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--fg); line-height:1.6; }
+    a { color:var(--accent); }
+    .wrap { max-width:1040px; margin:0 auto; padding:0 24px; }
+    header { padding:20px 0; display:flex; align-items:center; justify-content:space-between; }
+    header .brand { display:flex; gap:10px; align-items:center; font-weight:700; font-size:18px; color:var(--fg); text-decoration:none; }
+    header nav a { color:var(--muted); margin-left:20px; text-decoration:none; }
+    .hero { text-align:center; padding:64px 0 48px; }
+    .hero img { width:112px; height:112px; }
+    h1 { font-size:clamp(34px,5vw,54px); line-height:1.1; margin:18px 0 14px; letter-spacing:-0.02em; }
+    .lead { font-size:20px; color:var(--muted); max-width:680px; margin:0 auto 28px; }
+    .btn { display:inline-block; padding:12px 22px; border-radius:10px; font-weight:600; text-decoration:none; margin:6px; }
+    .btn.primary { background:linear-gradient(#7c7cf8,#8b5cf6); color:white; }
+    .btn.ghost { border:1px solid var(--line); color:var(--fg); }
+    .note { color:var(--muted); font-size:14px; margin-top:10px; }
+    section { padding:44px 0; border-top:1px solid var(--line); }
+    h2 { font-size:30px; margin:0 0 20px; letter-spacing:-0.01em; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; }
+    .card h3 { margin:0 0 8px; font-size:19px; }
+    .card ul { margin:0; padding-left:18px; color:var(--muted); }
+    table { width:100%; border-collapse:collapse; }
+    td, th { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:var(--muted); font-weight:600; }
+    kbd { background:#26244a; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-family:inherit; font-size:14px; }
+    details { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin-bottom:10px; }
+    summary { cursor:pointer; font-weight:600; }
+    details p { color:var(--muted); margin:10px 0 0; }
+    footer { padding:32px 0 48px; color:var(--muted); text-align:center; border-top:1px solid var(--line); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="./"><img src="assets/favicon-32.png" width="28" height="28" alt="" />Pastora</a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#security">Security</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/pankaj1980patel/pastora">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="hero">
+        <img src="assets/icon-256.png" width="112" height="112" alt="Pastora clipboard manager app icon" />
+        <h1>The clipboard manager for Mac<br />with a memory and a safe</h1>
+        <p class="lead">
+          Pastora keeps your <strong>clipboard history</strong>, lets you <strong>pin and reorder</strong> the snippets you use every day,
+          and stores <strong>passwords and API keys</strong> in an encrypted vault you unlock with <strong>Touch ID</strong>.
+        </p>
+        <a class="btn primary" href="https://github.com/pankaj1980patel/pastora/releases">Download for macOS</a>
+        <a class="btn ghost" href="https://github.com/pankaj1980patel/pastora">View source on GitHub</a>
+        <p class="note">Free &amp; open source · macOS 11+ · about 7 MB · works offline</p>
+      </div>
+
+      <section id="features">
+        <h2>Everything you copy, one shortcut away</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>📋 Clipboard history</h3>
+            <ul>
+              <li>Text, images, screenshots and files</li>
+              <li>Instant search with <kbd>⌘⇧V</kbd></li>
+              <li>Paste straight into the app you were using</li>
+              <li>Keep 50 items or unlimited history</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>📌 Pins you can reorder</h3>
+            <ul>
+              <li>Pin addresses, replies and code snippets</li>
+              <li>Drag up or down to reorder</li>
+              <li>Labels and editing</li>
+              <li>Quick paste with <kbd>⌘1</kbd>–<kbd>⌘9</kbd></li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>🔐 Secure Clips with Touch ID</h3>
+            <ul>
+              <li>Logins, API keys, cards, Wi-Fi, SSH and notes</li>
+              <li>Live 2FA / TOTP codes</li>
+              <li>Paste the username, then the password</li>
+              <li>Clipboard cleared automatically after copying</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>⚙️ Settings you control</h3>
+            <ul>
+              <li>Change every global shortcut</li>
+              <li>Ignore apps and sensitive patterns</li>
+              <li>Pause recording, themes, popup size</li>
+              <li>Start at login, export and import</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="security">
+        <h2>Private by design</h2>
+        <table>
+          <tr><th>Encryption</th><td>XChaCha20-Poly1305 for every secure clip, titles included</td></tr>
+          <tr><th>Master password</th><td>Argon2id key derivation (64 MiB, 3 passes)</td></tr>
+          <tr><th>Touch ID</th><td>The vault key is stored in the macOS Keychain and released only after a fingerprint check</td></tr>
+          <tr><th>Clipboard safety</th><td>Copied secrets are marked concealed, kept off Universal Clipboard, and cleared after 30 seconds</td></tr>
+          <tr><th>Network</th><td>None. No accounts, no cloud, no telemetry</td></tr>
+        </table>
+      </section>
+
+      <section id="faq">
+        <h2>Frequently asked questions</h2>
+        <details><summary>Is Pastora free?</summary><p>Yes. Pastora is free and open source under the MIT license.</p></details>
+        <details><summary>Does Pastora send my clipboard anywhere?</summary><p>No. Pastora makes no network requests. Your history, pins and secure clips are stored only on your Mac.</p></details>
+        <details><summary>How are passwords in Secure Clips protected?</summary><p>Each entry is encrypted with XChaCha20-Poly1305 using a vault key protected by your master password (Argon2id). You can unlock with Touch ID, and copied secrets are cleared from the clipboard automatically.</p></details>
+        <details><summary>Can I reorder pinned items?</summary><p>Yes. Drag pins up or down, or press <kbd>⌥↑</kbd> / <kbd>⌥↓</kbd>.</p></details>
+        <details><summary>How is Pastora different from Maccy or Paste?</summary><p>Pastora combines clipboard history and pins with a Touch ID protected vault for credentials, so you don't need a separate app for the passwords and API keys you paste every day.</p></details>
+        <details><summary>Will Pastora be available for Windows and Linux?</summary><p>Yes. Linux and Windows versions are on the roadmap, built from the same Rust and Tauri codebase.</p></details>
+      </section>
+    </main>
+
+    <footer>
+      Pastora · <a href="https://github.com/pankaj1980patel/pastora">GitHub</a> · MIT License
+    </footer>
+  </div>
+</body>
+</html>

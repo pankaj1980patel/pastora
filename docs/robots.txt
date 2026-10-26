@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://pankaj1980patel.github.io/pastora/sitemap.xml

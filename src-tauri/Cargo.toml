@@ -1,0 +1,56 @@
+[package]
+name = "pastora"
+version = "0.1.0"
+description = "Clipboard manager for Mac with history, pins and Touch ID secure clips"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/pankaj1980patel/pastora"
+homepage = "https://pankaj1980patel.github.io/pastora/"
+
+[lib]
+name = "pastora_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api", "protocol-asset"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+sha2 = "0.10"
+hex = "0.4"
+regex = "1"
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+rand = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+base64 = "0.22"
+hmac = "0.12"
+sha1 = "0.10"
+data-encoding = "2"
+keyring = { version = "3", features = ["apple-native"] }
+uuid = { version = "1", features = ["v4"] }
+log = "0.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSData", "NSURL", "NSError", "NSObject", "NSEnumerator"] }
+objc2-app-kit = { version = "0.3", features = ["NSPasteboard", "NSPasteboardItem", "NSWorkspace", "NSRunningApplication", "NSImage"] }
+objc2-local-authentication = { version = "0.3", features = ["LAContext", "LAError", "block2"] }
+core-graphics = "0.24"
+core-foundation = "0.10"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

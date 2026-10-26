@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+html[data-window="popup"],
+html[data-window="popup"] body {
+  background: transparent;
+  overflow: hidden;
+}
+
+html[data-window="settings"] body {
+  background: #f5f5f7;
+}
+html.dark[data-window="settings"] body {
+  background: #1c1c1e;
+  color: #f5f5f5;
+}
+
+input,
+textarea,
+pre,
+code {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(127, 127, 127, 0.3);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
