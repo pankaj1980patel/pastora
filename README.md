@@ -12,6 +12,8 @@
 ![Rust](https://img.shields.io/badge/Rust-Tauri%202-orange?logo=rust)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Offline](https://img.shields.io/badge/data-100%25%20local-green)
+[![Release](https://img.shields.io/github/v/release/pankaj1980patel/pastora)](https://github.com/pankaj1980patel/pastora/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/pankaj1980patel/pastora/total)](https://github.com/pankaj1980patel/pastora/releases)
 
 </div>
 
@@ -81,6 +83,12 @@ npm run tauri dev          # run in development
 npm run tauri build        # build Pastora.app and a .dmg
 cd src-tauri && cargo test # run the Rust unit tests
 ```
+
+### Releasing
+
+1. Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json`.
+2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+3. The **Release** workflow builds a universal DMG and creates a draft release. Review it and click **Publish**.
 
 ## Keyboard shortcuts
 
