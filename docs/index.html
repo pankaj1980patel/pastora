@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pastora: Free Clipboard Manager for Mac with Touch ID Vault</title>
-  <meta name="description" content="Pastora is a free, open-source clipboard manager for macOS. Searchable clipboard history, drag-to-reorder pins, and Touch ID–protected secure clips for passwords and API keys. 100% offline." />
+  <title>Pastora: Free Open-Source Clipboard Manager for Mac, Windows &amp; Linux</title>
+  <meta name="description" content="Pastora is a free, open-source clipboard manager for Mac, Windows and Linux by pankaj1980patel on GitHub. Searchable clipboard history, drag-to-reorder pins, and an encrypted vault for passwords and API keys with Touch ID on Mac. 100% offline." />
   <meta name="keywords" content="clipboard manager mac, macos clipboard history, clipboard app, copy paste history mac, touch id password vault, secure clipboard, open source clipboard manager, maccy alternative, paste app alternative, snippet manager mac" />
   <meta name="author" content="pankaj1980patel" />
   <meta name="robots" content="index, follow, max-image-preview:large" />
@@ -37,15 +37,17 @@
     "name": "Pastora",
     "applicationCategory": "UtilitiesApplication",
     "applicationSubCategory": "Clipboard manager",
-    "operatingSystem": "macOS 11 or later",
-    "description": "Free, open-source clipboard manager for macOS with searchable history, drag-to-reorder pins and Touch ID protected secure clips for credentials.",
+    "operatingSystem": "macOS 11+, Windows 10/11, Linux",
+    "description": "Free, open-source clipboard manager for Mac, Windows and Linux with searchable history, drag-to-reorder pins and an encrypted vault for credentials (Touch ID on Mac).",
+    "author": { "@type": "Person", "name": "pankaj1980patel", "url": "https://github.com/pankaj1980patel" },
+    "sameAs": ["https://github.com/pankaj1980patel/pastora"],
     "url": "https://pankaj1980patel.github.io/pastora/",
     "downloadUrl": "https://github.com/pankaj1980patel/pastora/releases/latest",
     "codeRepository": "https://github.com/pankaj1980patel/pastora",
     "image": "https://pankaj1980patel.github.io/pastora/assets/og-image.png",
     "license": "https://opensource.org/licenses/MIT",
     "softwareVersion": "0.1.0",
-    "fileSize": "9MB",
+    "fileSize": "10MB",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "featureList": [
       "Clipboard history for text, images and files",
@@ -69,7 +71,7 @@
       { "@type": "Question", "name": "Does Pastora send my clipboard anywhere?", "acceptedAnswer": { "@type": "Answer", "text": "No. Pastora makes no network requests. Your history, pins and secure clips are stored only on your Mac." } },
       { "@type": "Question", "name": "How are passwords in Secure Clips protected?", "acceptedAnswer": { "@type": "Answer", "text": "Each entry is encrypted with XChaCha20-Poly1305 using a vault key protected by your master password (Argon2id). You can unlock with Touch ID, and copied secrets are cleared from the clipboard automatically." } },
       { "@type": "Question", "name": "Can I reorder pinned items?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Drag pins up or down, or press Option+Up / Option+Down." } },
-      { "@type": "Question", "name": "Will Pastora be available for Windows and Linux?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Linux and Windows versions are on the roadmap, built from the same Rust and Tauri codebase." } }
+      { "@type": "Question", "name": "Does Pastora work on Windows and Linux?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Windows (.exe / .msi) and Linux (.AppImage / .deb) builds are on the releases page, with clipboard history, pins, image clips, paste and Secure Clips with your master password. Fingerprint unlock is Mac-only for now." } }
     ]
   }
   </script>
@@ -134,9 +136,9 @@
           Pastora keeps your <strong>clipboard history</strong>, lets you <strong>pin and reorder</strong> the snippets you use every day,
           and stores <strong>passwords and API keys</strong> in an encrypted vault you unlock with <strong>Touch ID</strong>.
         </p>
-        <a class="btn primary" href="https://github.com/pankaj1980patel/pastora/releases/latest">Download for macOS</a>
+        <a class="btn primary" href="https://github.com/pankaj1980patel/pastora/releases/latest">Download for Mac, Windows &amp; Linux</a>
         <a class="btn ghost" href="https://github.com/pankaj1980patel/pastora">View source on GitHub</a>
-        <p class="note">Free &amp; open source · macOS 11+ · Apple Silicon &amp; Intel · under 10 MB · works offline</p>
+        <p class="note">Free &amp; open source on GitHub: <a href="https://github.com/pankaj1980patel/pastora">pankaj1980patel/pastora</a> · macOS 11+ (Apple Silicon &amp; Intel), Windows, Linux · works offline</p>
         <div class="demo">
           <video src="assets/video/pastora-tour.mp4" poster="assets/video/tour-poster.webp" autoplay muted loop playsinline width="460" height="566" aria-label="Pastora popup: browsing clipboard history, image preview, search, pins and Secure Clips"></video>
         </div>
@@ -215,7 +217,7 @@
         <details><summary>How are passwords in Secure Clips protected?</summary><p>Each entry is encrypted with XChaCha20-Poly1305 using a vault key protected by your master password (Argon2id). You can unlock with Touch ID, and copied secrets are cleared from the clipboard automatically.</p></details>
         <details><summary>Can I reorder pinned items?</summary><p>Yes. Drag pins up or down, or press <kbd>⌥↑</kbd> / <kbd>⌥↓</kbd>.</p></details>
         <details><summary>How is Pastora different from Maccy or Paste?</summary><p>Pastora combines clipboard history and pins with a Touch ID protected vault for credentials, so you don't need a separate app for the passwords and API keys you paste every day.</p></details>
-        <details><summary>Will Pastora be available for Windows and Linux?</summary><p>Yes. Linux and Windows versions are on the roadmap, built from the same Rust and Tauri codebase.</p></details>
+        <details><summary>Does Pastora work on Windows and Linux?</summary><p>Yes. Windows (.exe / .msi) and Linux (.AppImage / .deb) builds are on the releases page, with clipboard history, pins, image clips, paste and Secure Clips with your master password. Fingerprint unlock is Mac-only for now.</p></details>
       </section>
     </main>
 

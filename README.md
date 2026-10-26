@@ -4,7 +4,7 @@
 
 # Pastora: a clipboard manager for Mac with Touch ID secure clips
 
-**Free, open-source clipboard history for macOS, with drag-to-reorder pins and an encrypted vault for passwords and API keys.**
+**Free, open-source clipboard manager for Mac, Windows and Linux: clipboard history, drag-to-reorder pins and an encrypted vault for passwords and API keys.**
 
 [Website](https://pankaj1980patel.github.io/pastora/) · [Download](https://github.com/pankaj1980patel/pastora/releases/latest) · [Build from source](#build-from-source) · [Roadmap](#roadmap)
 
