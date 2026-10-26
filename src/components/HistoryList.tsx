@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Clip, Settings } from "../lib/api";
 import { useEvent } from "../lib/hooks";
 import { showContextMenu } from "../lib/contextMenu";
-import { isMod } from "../lib/shortcut";
+import { isMod, keys } from "../lib/shortcut";
 import { useListNav } from "../lib/useListNav";
 import { ClipRow, Empty, imageFileName, Preview } from "./ClipRow";
 import { IconButton } from "./ui";
@@ -122,11 +122,11 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
             actions={
               <>
                 {c.kind === "image" && <IconButton icon="download" title="Save Image…" onClick={() => saveImage(c)} />}
-                <IconButton icon="pin" title={c.pinned ? "Unpin (⌘P)" : "Pin (⌘P)"} active={c.pinned} onClick={() => togglePin(c)} />
+                <IconButton icon="pin" title={c.pinned ? keys("Unpin (⌘P)") : keys("Pin (⌘P)")} active={c.pinned} onClick={() => togglePin(c)} />
                 {c.kind === "text" && (
-                  <IconButton icon="shield" title="Move to Secure Clips (⌘S)" onClick={() => onMoveToSecure(c)} />
+                  <IconButton icon="shield" title={keys("Move to Secure Clips (⌘S)")} onClick={() => onMoveToSecure(c)} />
                 )}
-                <IconButton icon="trash" title="Delete (⌘⌫)" onClick={() => remove(c)} />
+                <IconButton icon="trash" title={keys("Delete (⌘⌫)")} onClick={() => remove(c)} />
               </>
             }
           />

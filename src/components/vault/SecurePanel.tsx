@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Clip, EntrySummary, errorText, FieldSummary, VaultStatus } from "../../lib/api";
 import { useEvent } from "../../lib/hooks";
 import { showContextMenu } from "../../lib/contextMenu";
-import { isMod } from "../../lib/shortcut";
+import { isMod, keys } from "../../lib/shortcut";
 import { useListNav } from "../../lib/useListNav";
 import { Empty } from "../ClipRow";
 import { Icon } from "../Icon";
@@ -182,7 +182,7 @@ export function SecurePanel({ query, active, shownAt, pending, clearPending, onT
                 <button className="text-indigo-500 hover:underline" onClick={() => setView({ kind: "edit", id: null })}>
                   Add one
                 </button>{" "}
-                (⌘N)
+                ({keys("⌘N")})
               </>
             }
           />
@@ -217,7 +217,7 @@ export function SecurePanel({ query, active, shownAt, pending, clearPending, onT
                   <div className="truncate text-[0.8rem] leading-tight text-neutral-500">{e.subtitle || t.name}</div>
                 </div>
                 <div className={`flex items-center gap-0.5 ${i === selected ? "" : "opacity-0 group-hover:opacity-100"}`}>
-                  {userField(e.fields) && <IconButton icon="user" title="Copy username (⌘U)" onClick={() => copy(e, userField(e.fields), false)} />}
+                  {userField(e.fields) && <IconButton icon="user" title={keys("Copy username (⌘U)")} onClick={() => copy(e, userField(e.fields), false)} />}
                   {primaryField(e.fields) && <IconButton icon="key" title="Copy secret (↩ pastes)" onClick={() => copy(e, primaryField(e.fields), false)} />}
                   <IconButton icon="chevron" title="Details (→)" onClick={() => setView({ kind: "detail", id: e.id })} />
                 </div>
@@ -227,8 +227,8 @@ export function SecurePanel({ query, active, shownAt, pending, clearPending, onT
         </div>
       )}
       <div className="flex items-center gap-2 border-t border-black/5 px-2 py-1 dark:border-white/10">
-        <IconButton icon="plus" title="New secure clip (⌘N)" onClick={() => setView({ kind: "edit", id: null })} />
-        <div className="flex-1 text-[0.75rem] text-neutral-500">↩ paste secret · ⌘U username · ⌘L both · → details</div>
+        <IconButton icon="plus" title={keys("New secure clip (⌘N)")} onClick={() => setView({ kind: "edit", id: null })} />
+        <div className="flex-1 text-[0.75rem] text-neutral-500">{keys("↩ paste secret · ⌘U username · ⌘L both · → details")}</div>
         <IconButton icon="lock" title="Lock now" onClick={() => api.vaultLock()} />
       </div>
     </>

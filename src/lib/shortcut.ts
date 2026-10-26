@@ -1,7 +1,15 @@
 // Converts between keyboard events, accelerator strings understood by the
 // global-shortcut plugin (e.g. "CommandOrControl+Shift+KeyV") and display text (⌘⇧V).
 
-const MOD_ORDER = ["Control", "Alt", "Shift", "CommandOrControl"] as const;
+export const isMac = navigator.userAgent.includes("Mac");
+
+/** Turns macOS key symbols in UI text into Windows/Linux names (⌘P → Ctrl+P). */
+export function keys(s: string): string {
+  if (isMac) return s;
+  return s.replace(/[⌘⌃]/g, "Ctrl+").replace(/⌥/g, "Alt+").replace(/⇧/g, "Shift+").replace(/⌫/g, "Backspace");
+}
+
+const MOD_ORDER = ["Control", "Alt", "Shift", "CommandOrControl", "Super"] as const;
 const MOD_SYMBOL: Record<string, string> = {
   Control: "⌃",
   Ctrl: "⌃",
@@ -49,8 +57,13 @@ export function displayAccelerator(accel: string): string {
   if (!accel) return "";
   const parts = accel.split("+");
   const key = parts.pop()!;
+  const label = keyLabel(key.length === 1 ? key.toUpperCase() : key);
+  if (!isMac) {
+    const names: Record<string, string> = { CommandOrControl: "Ctrl", CmdOrCtrl: "Ctrl", Control: "Ctrl", Super: "Win" };
+    return [...parts.map((p) => names[p] ?? p), label].join("+");
+  }
   const mods = parts.map((p) => MOD_SYMBOL[p] ?? p);
-  return mods.join("") + keyLabel(key.length === 1 ? key.toUpperCase() : key);
+  return mods.join("") + label;
 }
 
 const MODIFIER_CODES = new Set([
@@ -61,10 +74,11 @@ const MODIFIER_CODES = new Set([
 export function acceleratorFromEvent(e: KeyboardEvent): string | null {
   if (MODIFIER_CODES.has(e.code)) return null;
   const mods: string[] = [];
-  if (e.ctrlKey) mods.push("Control");
+  // On Windows/Linux, Ctrl is the "CommandOrControl" key and the Windows/Super key is separate.
+  if (e.ctrlKey) mods.push(isMac ? "Control" : "CommandOrControl");
   if (e.altKey) mods.push("Alt");
   if (e.shiftKey) mods.push("Shift");
-  if (e.metaKey) mods.push("CommandOrControl");
+  if (e.metaKey) mods.push(isMac ? "CommandOrControl" : "Super");
   const isFn = /^F\d{1,2}$/.test(e.code);
   // Global shortcuts need a modifier other than Shift, except function keys.
   if (!isFn && !mods.some((m) => m !== "Shift")) return null;

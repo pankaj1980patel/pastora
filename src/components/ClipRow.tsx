@@ -3,6 +3,7 @@ import { forwardRef, ReactNode } from "react";
 import { Kind } from "../lib/api";
 import { fileName, firstLine, relativeTime, absoluteTime } from "../lib/format";
 import { Icon } from "./Icon";
+import { keys } from "../lib/shortcut";
 
 export interface RowData {
   kind: Kind;
@@ -106,7 +107,7 @@ export const ClipRow = forwardRef<HTMLDivElement, Props>(function ClipRow(
       )}
       <div className={`hidden items-center gap-0.5 group-hover:flex ${selected ? "[&_button]:text-white" : ""}`}>{actions}</div>
       {index < 9 && (
-        <span className={`w-6 shrink-0 text-right text-[0.75rem] ${selected ? "text-white/70" : "text-neutral-400"}`}>⌘{index + 1}</span>
+        <span className={`min-w-6 shrink-0 text-right text-[0.75rem] ${selected ? "text-white/70" : "text-neutral-400"}`}>{keys(`⌘${index + 1}`)}</span>
       )}
     </div>
   );

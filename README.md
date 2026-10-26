@@ -71,6 +71,15 @@ Your data is stored in a SQLite database at `~/Library/Application Support/com.p
    - run `xattr -dr com.apple.quarantine /Applications/Pastora.app` in Terminal.
 4. Click the paw icon in the menu bar, or press **⌘⇧V**.
 
+### Windows and Linux (early)
+
+Download from the same release:
+
+- **Windows:** `Pastora_<version>_Windows_x64-setup.exe` (or the `.msi`). Windows SmartScreen may warn because the installer isn't signed: click **More info → Run anyway**.
+- **Linux:** `Pastora_<version>_Linux_x86_64.AppImage` (`chmod +x` it and run) or the `.deb`.
+
+These builds have clipboard history, pins, image clips, paste with **Ctrl+V** and Secure Clips with your master password. Not there yet: Windows Hello / fingerprint unlock, the "Ignored apps" picker, and global shortcuts on Wayland (X11 works). Open the popup with **Ctrl+Shift+V**.
+
 ## Build from source
 
 Requirements: macOS 11+, [Rust](https://rustup.rs) 1.77+, Node.js 20+, and the Xcode Command Line Tools.
@@ -107,8 +116,9 @@ cd src-tauri && cargo test # run the Rust unit tests
 ## Roadmap
 
 - [x] macOS: history, pins, Secure Clips, Touch ID, settings, start at login
-- [ ] Linux (X11/Wayland, Secret Service, fprintd fingerprint)
-- [ ] Windows (Windows Hello, Credential Manager, excluded from Win+V history)
+- [x] Windows and Linux basics: history, pins, image clips, paste, Secure Clips with password
+- [ ] Linux: Wayland shortcuts, Secret Service, fprintd fingerprint
+- [ ] Windows: Windows Hello, Credential Manager, ignored-apps picker
 - [ ] Signed and notarized releases with auto-update
 
 ## Tech stack

@@ -1,7 +1,7 @@
 import logo from "../assets/logo.png";
 import { useEffect, useState } from "react";
 import { api, Settings } from "../lib/api";
-import { displayAccelerator } from "../lib/shortcut";
+import { displayAccelerator, isMac } from "../lib/shortcut";
 import { Icon } from "./Icon";
 import { Button, Kbd } from "./ui";
 
@@ -31,20 +31,22 @@ export function Onboarding({ settings }: { settings: Settings }) {
           Keep snippets you use often. Drag to reorder. <Kbd>{displayAccelerator(sc.openPins)}</Kbd>
         </Step>
         <Step icon="shield" title="Secure Clips">
-          Passwords, API keys and cards, encrypted and unlocked with Touch ID. <Kbd>{displayAccelerator(sc.openSecure)}</Kbd>
+          Passwords, API keys and cards, encrypted{isMac ? " and unlocked with Touch ID" : ""}. <Kbd>{displayAccelerator(sc.openSecure)}</Kbd>
         </Step>
-        <Step icon="paste" title="Paste automatically">
-          To paste into the app you were using, Pastora needs Accessibility permission.
-          <div className="mt-1.5">
-            {trusted ? (
-              <span className="inline-flex items-center gap-1 text-green-600">
-                <Icon name="check" size={14} /> Allowed
-              </span>
-            ) : (
-              <Button onClick={() => api.requestAccessibility()}>Allow in System Settings…</Button>
-            )}
-          </div>
-        </Step>
+        {isMac && (
+          <Step icon="paste" title="Paste automatically">
+            To paste into the app you were using, Pastora needs Accessibility permission.
+            <div className="mt-1.5">
+              {trusted ? (
+                <span className="inline-flex items-center gap-1 text-green-600">
+                  <Icon name="check" size={14} /> Allowed
+                </span>
+              ) : (
+                <Button onClick={() => api.requestAccessibility()}>Allow in System Settings…</Button>
+              )}
+            </div>
+          </Step>
+        )}
       </div>
       <div className="mt-auto flex items-center justify-between pt-4">
         <button className="text-[0.85rem] text-neutral-500 hover:underline" onClick={() => api.openSettings()}>

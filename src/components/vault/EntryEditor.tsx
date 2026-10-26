@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, Entry, errorText, Field, FieldKind } from "../../lib/api";
 import { generatePassword, GenOptions, strength } from "../../lib/password";
-import { isMod } from "../../lib/shortcut";
+import { isMod, keys } from "../../lib/shortcut";
 import { Icon } from "../Icon";
 import { Button, IconButton, inputClass, Toggle } from "../ui";
 import { FIELD_KINDS, newEntry, TEMPLATES } from "./templates";
@@ -273,7 +273,7 @@ export function EntryEditor({ entryId, prefill, onClose, onSaved, onDeleted }: P
         <div className="flex-1" />
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" onClick={save}>
-          Save <span className="opacity-70">⌘↩</span>
+          Save <span className="opacity-70">{keys("⌘↩")}</span>
         </Button>
       </div>
     </div>

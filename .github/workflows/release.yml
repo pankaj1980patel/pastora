@@ -1,41 +1,104 @@
 name: Release
 
-# Push a tag like v0.2.0 (matching the version in tauri.conf.json) to build
-# a universal macOS DMG and create a draft GitHub release for review.
+# Builds macOS (universal), Windows and Linux and uploads them to the GitHub release
+# for the tag, replacing files with the same name. Push a tag like v0.2.0 (matching the
+# version in tauri.conf.json), or run it by hand for an existing tag.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload to (e.g. v0.1.0)"
+        required: true
 
 permissions:
   contents: write
 
 jobs:
-  macos:
-    runs-on: macos-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS
+            args: --target universal-apple-darwin --bundles app,dmg
+            bundle: src-tauri/target/universal-apple-darwin/release/bundle
+          - os: windows-latest
+            name: Windows
+            args: --bundles msi,nsis
+            bundle: src-tauri/target/release/bundle
+          - os: ubuntu-22.04
+            name: Linux
+            args: --bundles deb,appimage
+            bundle: src-tauri/target/release/bundle
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.name == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
       - run: npm ci
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm run tauri build -- ${{ matrix.args }}
+      - name: Collect files
+        shell: bash
+        run: |
+          ver=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          b="${{ matrix.bundle }}"
+          mkdir out
+          case "${{ matrix.name }}" in
+            macOS)
+              cp "$b"/dmg/*.dmg "out/Pastora_${ver}_macOS_universal.dmg"
+              ditto -c -k --keepParent "$b/macos/Pastora.app" "out/Pastora_${ver}_macOS_universal.app.zip" ;;
+            Windows)
+              cp "$b"/msi/*.msi "out/Pastora_${ver}_Windows_x64.msi"
+              cp "$b"/nsis/*.exe "out/Pastora_${ver}_Windows_x64-setup.exe" ;;
+            Linux)
+              cp "$b"/deb/*.deb "out/Pastora_${ver}_Linux_amd64.deb"
+              cp "$b"/appimage/*.AppImage "out/Pastora_${ver}_Linux_x86_64.AppImage" ;;
+          esac
+          ls -l out
+      - uses: actions/upload-artifact@v4
         with:
-          tagName: v__VERSION__
-          releaseName: Pastora __VERSION__
-          releaseBody: |
-            Download the `.dmg` below (universal: Apple Silicon + Intel, macOS 11+).
-            First launch: System Settings → Privacy & Security → **Open Anyway**,
-            or run `xattr -dr com.apple.quarantine /Applications/Pastora.app`.
-          releaseDraft: true
-          prerelease: false
-          args: --target universal-apple-darwin
+          name: ${{ matrix.name }}
+          path: out/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Upload to the release
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --title "Pastora ${TAG#v}" --notes "Downloads for macOS (universal), Windows and Linux are below."
+          fi
+          gh release upload "$TAG" out/* --clobber
+      - name: Update SHA256SUMS.txt
+        run: |
+          mkdir all
+          gh release download "$TAG" --dir all --pattern 'Pastora_*'
+          (cd all && sha256sum Pastora_* > SHA256SUMS.txt)
+          gh release upload "$TAG" all/SHA256SUMS.txt --clobber

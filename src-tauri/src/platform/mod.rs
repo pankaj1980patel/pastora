@@ -1,5 +1,4 @@
-//! OS-specific code. Phase 1 implements macOS; other platforms get stubs
-//! until their phase lands.
+//! OS-specific code: native macOS, and a cross-platform version for Windows and Linux.
 
 #[derive(Debug, Default)]
 pub struct Snapshot {
@@ -21,6 +20,8 @@ pub const CONCEALED_TYPES: &[&str] = &[
     "de.petermaurer.TransientPasteboardType",
     "com.typeit4me.clipping",
     "Pasteboard generator type",
+    // Windows: set by password managers to keep the item out of clipboard tools.
+    "ExcludeClipboardContentFromMonitorProcessing",
 ];
 
 #[cfg(target_os = "macos")]
@@ -29,6 +30,6 @@ mod macos;
 pub use macos::*;
 
 #[cfg(not(target_os = "macos"))]
-mod stub;
+mod generic;
 #[cfg(not(target_os = "macos"))]
-pub use stub::*;
+pub use generic::*;

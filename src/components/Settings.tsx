@@ -3,7 +3,7 @@ import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import { ReactNode, useEffect, useState } from "react";
 import { api, AppInfo, errorText, IgnoredApp, Settings, Shortcuts, VaultStatus } from "../lib/api";
 import { useEvent } from "../lib/hooks";
-import { acceleratorFromEvent, displayAccelerator } from "../lib/shortcut";
+import { acceleratorFromEvent, displayAccelerator, isMac, keys } from "../lib/shortcut";
 import { Icon } from "./Icon";
 import { Button, inputClass, Kbd, Toggle } from "./ui";
 
@@ -351,20 +351,20 @@ const GLOBAL_SHORTCUTS: [keyof Shortcuts, string, string][] = [
 
 const POPUP_KEYS: [string, string][] = [
   ["↩", "Paste selected item"],
-  ["⌘↩", "Copy without pasting"],
-  ["⌘1 … ⌘9", "Paste item 1–9"],
+  [keys("⌘↩"), "Copy without pasting"],
+  [keys("⌘1 … ⌘9"), "Paste item 1–9"],
   ["↑ ↓", "Move selection"],
   ["⇥ / ⇧⇥", "Next / previous tab"],
-  ["⌘P", "Pin / unpin (History)"],
-  ["⌘S", "Move to Secure Clips (History)"],
-  ["⌘⌫", "Delete item"],
-  ["⌥↑ ⌥↓", "Reorder pin"],
-  ["⌘E", "Edit pin or secure clip"],
-  ["⌘N", "New pin or secure clip"],
-  ["⌘U / ⌘T", "Paste username / one-time code (Secure)"],
-  ["⌘L", "Paste username, then password (Secure)"],
+  [keys("⌘P"), "Pin / unpin (History)"],
+  [keys("⌘S"), "Move to Secure Clips (History)"],
+  [keys("⌘⌫"), "Delete item"],
+  [keys("⌥↑ ⌥↓"), "Reorder pin"],
+  [keys("⌘E"), "Edit pin or secure clip"],
+  [keys("⌘N"), "New pin or secure clip"],
+  [keys("⌘U / ⌘T"), "Paste username / one-time code (Secure)"],
+  [keys("⌘L"), "Paste username, then password (Secure)"],
   ["→", "Open secure clip details"],
-  ["⌘,", "Open Settings"],
+  [keys("⌘,"), "Open Settings"],
   ["⎋", "Clear search, go back or close"],
 ];
 
@@ -410,7 +410,7 @@ function Paste({ s, update }: { s: Settings; update: Update }) {
       <Row label="Paste automatically" hint="After choosing an item, paste it into the app you were using. Otherwise it's only copied.">
         <Toggle checked={s.autoPaste} onChange={(v) => update({ autoPaste: v })} />
       </Row>
-      {s.autoPaste && (
+      {s.autoPaste && isMac && (
         <Row
           label="Accessibility permission"
           hint={
@@ -494,6 +494,7 @@ function Secure({ s, update }: { s: Settings; update: Update }) {
         </Row>
       </Group>
 
+      {isMac && (
       <Group title={status.biometricName}>
         <Row
           label={`Unlock with ${status.biometricName}`}
@@ -521,6 +522,7 @@ function Secure({ s, update }: { s: Settings; update: Update }) {
           />
         </Row>
       </Group>
+      )}
 
       {status.initialized && (
         <Group title="Master password">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, Clip, Settings } from "../lib/api";
 import { useEvent } from "../lib/hooks";
-import { isMod } from "../lib/shortcut";
+import { isMac, isMod, keys as keyText } from "../lib/shortcut";
 import { HistoryList } from "./HistoryList";
 import { Icon } from "./Icon";
 import { Onboarding } from "./Onboarding";
@@ -90,7 +90,12 @@ export function Popup({ settings }: { settings: Settings }) {
   };
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden rounded-[14px] border border-black/10 bg-white/75 text-neutral-900 dark:border-white/10 dark:bg-neutral-900/70 dark:text-neutral-100">
+    <div
+      className={`relative flex h-screen flex-col overflow-hidden rounded-[14px] border border-black/10 text-neutral-900 dark:border-white/10 dark:text-neutral-100 ${
+        // Only macOS draws the frosted blur behind the window; elsewhere use a solid background.
+        isMac ? "bg-white/75 dark:bg-neutral-900/70" : "bg-white dark:bg-neutral-900"
+      }`}
+    >
       {/* Search + tabs */}
       <div data-tauri-drag-region className="shrink-0 px-2.5 pb-1.5 pt-2.5">
         {!searchHidden && (
@@ -114,7 +119,7 @@ export function Popup({ settings }: { settings: Settings }) {
                 <Icon name="pause" size={11} /> Paused
               </button>
             )}
-            <IconButton icon="gear" title="Settings (⌘,)" onClick={() => api.openSettings()} />
+            <IconButton icon="gear" title={keyText("Settings (⌘,)")} onClick={() => api.openSettings()} />
           </div>
         )}
         <div className="mt-1.5 flex gap-1">
@@ -174,15 +179,15 @@ export function Popup({ settings }: { settings: Settings }) {
             <Kbd>↩</Kbd> paste
           </span>
           <span>
-            <Kbd>⌘↩</Kbd> copy
+            <Kbd>{keyText("⌘↩")}</Kbd> copy
           </span>
           {tab === "history" ? (
             <span>
-              <Kbd>⌘P</Kbd> pin
+              <Kbd>{keyText("⌘P")}</Kbd> pin
             </span>
           ) : (
             <span>
-              <Kbd>⌥↑↓</Kbd> reorder
+              <Kbd>{keyText("⌥↑↓")}</Kbd> reorder
             </span>
           )}
           <span className="ml-auto">

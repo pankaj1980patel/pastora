@@ -4,6 +4,7 @@ import { absoluteTime } from "../../lib/format";
 import { Icon } from "../Icon";
 import { Countdown, IconButton, Kbd } from "../ui";
 import { primaryField, template, totpField, userField } from "./templates";
+import { keys } from "../../lib/shortcut";
 
 interface Props {
   entry: EntrySummary;
@@ -106,7 +107,7 @@ export function EntryDetail({ entry, onCopy, onBack, onEdit, onToast }: Props) {
             {t.name} · updated {absoluteTime(entry.updatedAt)}
           </div>
         </div>
-        <IconButton icon="edit" title="Edit (⌘E)" onClick={onEdit} />
+        <IconButton icon="edit" title={keys("Edit (⌘E)")} onClick={onEdit} />
       </div>
       <div className="flex-1 overflow-y-auto px-1.5 py-1">
         {entry.fields.map((f) => (
@@ -122,17 +123,17 @@ export function EntryDetail({ entry, onCopy, onBack, onEdit, onToast }: Props) {
         )}
         {user && (
           <span>
-            <Kbd>⌘U</Kbd> {user.label.toLowerCase()}
+            <Kbd>{keys("⌘U")}</Kbd> {user.label.toLowerCase()}
           </span>
         )}
         {totp && (
           <span>
-            <Kbd>⌘T</Kbd> code
+            <Kbd>{keys("⌘T")}</Kbd> code
           </span>
         )}
         {user && primary && (
           <span>
-            <Kbd>⌘L</Kbd> username, then password
+            <Kbd>{keys("⌘L")}</Kbd> username, then password
           </span>
         )}
       </div>

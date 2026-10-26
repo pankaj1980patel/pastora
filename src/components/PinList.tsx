@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, Pin, Settings } from "../lib/api";
 import { useEvent } from "../lib/hooks";
 import { showContextMenu } from "../lib/contextMenu";
-import { isMod } from "../lib/shortcut";
+import { isMod, keys } from "../lib/shortcut";
 import { useListNav } from "../lib/useListNav";
 import { ClipRow, Empty, imageFileName, Preview } from "./ClipRow";
 import { Icon } from "./Icon";
@@ -67,7 +67,7 @@ function SortablePin(props: {
           {...listeners}
           tabIndex={-1}
           onClick={(e) => e.stopPropagation()}
-          title={draggable ? "Drag to reorder (⌥↑ / ⌥↓)" : "Clear the search to reorder"}
+          title={draggable ? keys("Drag to reorder (⌥↑ / ⌥↓)") : "Clear the search to reorder"}
           className={`-ml-1 rounded p-0.5 text-neutral-400 ${draggable ? "cursor-grab hover:bg-black/10 active:cursor-grabbing dark:hover:bg-white/10" : "opacity-30"}`}
         >
           <Icon name="grip" size={14} strokeWidth={3} />
@@ -76,8 +76,8 @@ function SortablePin(props: {
       actions={
         <>
           {props.onSave && <IconButton icon="download" title="Save Image…" onClick={props.onSave} />}
-          <IconButton icon="edit" title="Rename / edit (⌘E)" onClick={props.onEdit} />
-          <IconButton icon="trash" title="Unpin (⌘⌫)" onClick={props.onDelete} />
+          <IconButton icon="edit" title={keys("Rename / edit (⌘E)")} onClick={props.onEdit} />
+          <IconButton icon="trash" title={keys("Unpin (⌘⌫)")} onClick={props.onDelete} />
         </>
       }
     />
@@ -165,7 +165,7 @@ export function PinList({ query, settings, active, onToast, registerKeys, setMod
             title="No pins yet"
             hint={
               <>
-                Press ⌘P on a history item to pin it, or{" "}
+                Press {keys("⌘P")} on a history item to pin it, or{" "}
                 <button className="text-indigo-500 hover:underline" onClick={() => setEditing("new")}>
                   add a pin
                 </button>
@@ -220,7 +220,7 @@ export function PinList({ query, settings, active, onToast, registerKeys, setMod
             onClick={() => setEditing("new")}
             className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[0.9rem] text-neutral-500 hover:bg-black/5 dark:hover:bg-white/5"
           >
-            <Icon name="plus" size={14} /> New pin <span className="ml-auto text-[0.75rem]">⌘N</span>
+            <Icon name="plus" size={14} /> New pin <span className="ml-auto text-[0.75rem]">{keys("⌘N")}</span>
           </button>
         </div>
       )}
@@ -282,7 +282,7 @@ function PinEditor({ pin, onClose, onSaved }: { pin: Pin | null; onClose: () => 
         <div className="mt-3 flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={save}>
-            Save <span className="opacity-70">⌘↩</span>
+            Save <span className="opacity-70">{keys("⌘↩")}</span>
           </Button>
         </div>
       </div>

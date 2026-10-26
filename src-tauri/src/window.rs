@@ -110,6 +110,11 @@ pub fn return_focus(app: &AppHandle) {
 pub fn wait_for_previous_app(timeout: std::time::Duration) {
     let own = std::process::id() as i32;
     let prev = PREVIOUS_PID.load(Ordering::SeqCst);
+    if crate::platform::frontmost_pid().is_none() {
+        // Can't tell which app is in front (Linux): give the window manager a moment.
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        return;
+    }
     let start = std::time::Instant::now();
     while start.elapsed() < timeout {
         match crate::platform::frontmost_pid() {
