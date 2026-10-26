@@ -717,6 +717,12 @@ function About() {
       <button className="text-indigo-500 hover:underline" onClick={() => api.openWebsite()}>
         github.com/pankaj1980patel/pastora
       </button>
+      <button
+        className="mt-2 rounded-lg border border-black bg-[#FFDD00] px-4 py-1.5 font-medium text-black hover:brightness-95"
+        onClick={() => api.openWebsite("support")}
+      >
+        ☕ Buy me a coffee
+      </button>
     </div>
   );
 }
