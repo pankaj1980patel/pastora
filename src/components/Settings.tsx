@@ -718,10 +718,10 @@ function About() {
         github.com/pankaj1980patel/pastora
       </button>
       <button
-        className="mt-2 rounded-lg border border-black bg-[#FFDD00] px-4 py-1.5 font-medium text-black hover:brightness-95"
+        className="mt-2 rounded-lg bg-[#72a4f2] px-4 py-1.5 font-medium text-white hover:brightness-95"
         onClick={() => api.openWebsite("support")}
       >
-        ☕ Buy me a coffee
+        ☕ Support me on Ko-fi
       </button>
     </div>
   );

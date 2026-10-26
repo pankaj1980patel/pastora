@@ -593,7 +593,7 @@ pub fn open_data_folder(app: AppHandle) {
 #[tauri::command]
 pub fn open_website(page: Option<String>) {
     let url = match page.as_deref() {
-        Some("support") => "https://www.buymeacoffee.com/pantherpatt",
+        Some("support") => "https://ko-fi.com/D4H729IALL",
         _ => "https://github.com/pankaj1980patel/pastora",
     };
     platform::open_path(std::path::Path::new(url));
