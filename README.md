@@ -14,7 +14,6 @@
 ![Offline](https://img.shields.io/badge/data-100%25%20local-green)
 [![Release](https://img.shields.io/github/v/release/pankaj1980patel/pastora)](https://github.com/pankaj1980patel/pastora/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/pankaj1980patel/pastora/total)](https://github.com/pankaj1980patel/pastora/releases)
-[![Support me on Ko-fi](https://img.shields.io/badge/Support%20me%20on-Ko--fi-72a4f2?logo=kofi&logoColor=white)](https://ko-fi.com/D4H729IALL)
 
 </div>
 
@@ -121,10 +120,6 @@ cd src-tauri && cargo test # run the Rust unit tests
 - [ ] Linux: Wayland shortcuts, Secret Service, fprintd fingerprint
 - [ ] Windows: Windows Hello, Credential Manager, ignored-apps picker
 - [ ] Signed and notarized releases with auto-update
-
-## Support
-
-Pastora is free and open source. If it saves you time, you can [support me on Ko-fi](https://ko-fi.com/D4H729IALL). ☕
 
 ## Tech stack
 
