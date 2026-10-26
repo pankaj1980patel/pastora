@@ -1,6 +1,6 @@
 use crate::state::state;
 use serde_json::json;
-use std::sync::atomic::{AtomicI32, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 pub const POPUP: &str = "popup";
@@ -11,6 +11,11 @@ static PREVIOUS_PID: AtomicI32 = AtomicI32::new(0);
 /// When the popup last hid because it lost focus (ms), so a click on the menu bar icon
 /// that caused the blur doesn't immediately reopen it.
 static LAST_BLUR_HIDE: AtomicI64 = AtomicI64::new(0);
+/// Bumped on every show/hide, so a fade-out that finishes after the popup was
+/// re-opened doesn't hide it.
+static ANIM_GEN: AtomicU64 = AtomicU64::new(0);
+/// A fade-out is running.
+static HIDING: AtomicBool = AtomicBool::new(false);
 
 pub fn popup(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window(POPUP)
@@ -41,17 +46,43 @@ fn show_popup_at(app: &AppHandle, tab: Option<&str>, mode: &str) {
             PREVIOUS_PID.store(pid, Ordering::SeqCst);
         }
     }
+    ANIM_GEN.fetch_add(1, Ordering::SeqCst);
+    HIDING.store(false, Ordering::SeqCst);
+    // Reset the list/search before the window is visible, so old content doesn't flash.
+    let _ = app.emit_to(POPUP, "popup-shown", json!({ "tab": tab }));
     let _ = w.set_size(LogicalSize::new(s.popup_width as f64, s.popup_height as f64));
     position_popup(app, &w, mode);
     let _ = w.show();
     let _ = w.set_focus();
-    let _ = app.emit_to(POPUP, "popup-shown", json!({ "tab": tab }));
+    #[cfg(target_os = "macos")]
+    if let Ok(ns) = w.ns_window() {
+        let ns = ns as usize;
+        let _ = app.run_on_main_thread(move || unsafe { crate::platform::animate_in(ns as *mut _) });
+    }
 }
 
+/// Fades the popup out, then hides it.
 pub fn hide_popup(app: &AppHandle) {
-    if let Some(w) = popup(app) {
-        let _ = w.hide();
+    let Some(w) = popup(app) else { return };
+    if !w.is_visible().unwrap_or(false) || HIDING.swap(true, Ordering::SeqCst) {
+        return;
     }
+    let gen = ANIM_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    let hide = move || {
+        if ANIM_GEN.load(Ordering::SeqCst) != gen {
+            return false;
+        }
+        HIDING.store(false, Ordering::SeqCst);
+        let _ = w.hide();
+        true
+    };
+    #[cfg(target_os = "macos")]
+    if let Some(ns) = popup(app).and_then(|w| w.ns_window().ok()) {
+        let ns = ns as usize;
+        let _ = app.run_on_main_thread(move || unsafe { crate::platform::animate_out(ns as *mut _, hide) });
+        return;
+    }
+    hide();
 }
 
 pub fn toggle_popup(app: &AppHandle, tab: Option<&str>) {
@@ -66,16 +97,26 @@ pub fn toggle_popup(app: &AppHandle, tab: Option<&str>) {
 /// Hides the popup and returns focus to the previous app (so a paste lands there).
 pub fn return_focus(app: &AppHandle) {
     hide_popup(app);
-    let settings_open = app
-        .get_webview_window(SETTINGS)
-        .map(|w| w.is_visible().unwrap_or(false))
-        .unwrap_or(false);
     let pid = PREVIOUS_PID.load(Ordering::SeqCst);
-    if settings_open && pid > 0 && crate::platform::activate_pid(pid) {
+    if pid > 0 && crate::platform::activate_pid(pid) {
         return;
     }
     #[cfg(target_os = "macos")]
     let _ = app.hide();
+}
+
+/// Blocks until another app is frontmost again (or `timeout` passes), so Cmd+V
+/// isn't sent while our own window still has focus.
+pub fn wait_for_previous_app(timeout: std::time::Duration) {
+    let own = std::process::id() as i32;
+    let prev = PREVIOUS_PID.load(Ordering::SeqCst);
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout {
+        match crate::platform::frontmost_pid() {
+            Some(pid) if pid == prev || (pid != own && pid > 0) => return,
+            _ => std::thread::sleep(std::time::Duration::from_millis(15)),
+        }
+    }
 }
 
 fn tray_rect(app: &AppHandle) -> Option<(f64, f64, f64, f64)> {
@@ -149,7 +190,7 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
         let st = state(window.app_handle());
         if !st.suppress_blur.load(Ordering::SeqCst) {
             LAST_BLUR_HIDE.store(crate::db::now_ms(), Ordering::SeqCst);
-            let _ = window.hide();
+            hide_popup(window.app_handle());
         }
     }
 }

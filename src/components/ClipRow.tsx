@@ -17,12 +17,27 @@ export interface RowData {
 
 export function clipTitle(d: RowData): string {
   if (d.label) return d.label;
-  if (d.kind === "image") return `Image ${d.width ?? "?"}×${d.height ?? "?"}`;
+  if (d.kind === "image") {
+    const size = `${d.width ?? "?"}×${d.height ?? "?"}`;
+    // Copied image files keep their file name; clipboard images are stored as "<sha256>.png".
+    return HASH_NAME.test(d.content) ? `Image ${size}` : `${d.content} · ${size}`;
+  }
   if (d.kind === "files") {
     const files = d.content.split("\n");
     return files.length === 1 ? fileName(files[0]) : `${files.length} files`;
   }
   return firstLine(d.content) || "(whitespace)";
+}
+
+const HASH_NAME = /^[0-9a-f]{64}\.\w+$/;
+
+/** Default file name when saving an image clip: its original name, or a dated one. */
+export function imageFileName(d: RowData): string {
+  if (d.content && !HASH_NAME.test(d.content)) return d.content;
+  const ext = d.imagePath?.split(".").pop() ?? "png";
+  const t = new Date(d.time ?? Date.now());
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `Pastora Image ${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} at ${p(t.getHours())}.${p(t.getMinutes())}.${p(t.getSeconds())}.${ext}`;
 }
 
 export function ClipThumb({ d, selected }: { d: RowData; selected?: boolean }) {
@@ -45,8 +60,10 @@ interface Props {
   index: number;
   showSource: boolean;
   relative: boolean;
+  /** Single click: use the item (paste, or copy when auto-paste is off). */
   onClick: () => void;
-  onDoubleClick: () => void;
+  /** Selects the row without using it (right-click). */
+  onSelect: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   actions?: ReactNode;
   leading?: ReactNode;
@@ -55,7 +72,7 @@ interface Props {
 }
 
 export const ClipRow = forwardRef<HTMLDivElement, Props>(function ClipRow(
-  { d, selected, index, showSource, relative, onClick, onDoubleClick, onContextMenu, actions, leading, style, dragging },
+  { d, selected, index, showSource, relative, onClick, onSelect, onContextMenu, actions, leading, style, dragging },
   ref,
 ) {
   const time = d.time ? (relative ? relativeTime(d.time) : absoluteTime(d.time)) : null;
@@ -67,10 +84,9 @@ export const ClipRow = forwardRef<HTMLDivElement, Props>(function ClipRow(
       title={tooltip || undefined}
       data-selected={selected}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       onContextMenu={(e) => {
         e.preventDefault();
-        onClick();
+        onSelect();
         onContextMenu?.(e);
       }}
       className={`group relative flex h-[2.15rem] cursor-default select-none items-center gap-2 rounded-md px-2 ${
@@ -96,12 +112,24 @@ export const ClipRow = forwardRef<HTMLDivElement, Props>(function ClipRow(
   );
 });
 
-export function Preview({ d }: { d: RowData | null }) {
+export function Preview({ d, onSave }: { d: RowData | null; onSave?: () => void }) {
   if (!d) return null;
   return (
-    <div className="max-h-36 shrink-0 overflow-auto border-t border-black/5 px-3 py-2 dark:border-white/10">
+    <div className="relative max-h-36 shrink-0 overflow-auto border-t border-black/5 px-3 py-2 dark:border-white/10">
       {d.kind === "image" && d.imagePath ? (
-        <img src={convertFileSrc(d.imagePath)} className="mx-auto max-h-32 rounded object-contain" />
+        <>
+          <img src={convertFileSrc(d.imagePath)} className="mx-auto max-h-32 rounded object-contain" />
+          {onSave && (
+            <button
+              type="button"
+              onClick={onSave}
+              title="Save Image…"
+              className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/55 px-2 py-1 text-[0.75rem] text-white backdrop-blur hover:bg-black/70"
+            >
+              <Icon name="download" size={13} /> Save…
+            </button>
+          )}
+        </>
       ) : (
         <pre className="whitespace-pre-wrap break-words font-mono text-[0.8rem] text-neutral-600 dark:text-neutral-300">
           {d.content.length > 4000 ? d.content.slice(0, 4000) + "…" : d.content}

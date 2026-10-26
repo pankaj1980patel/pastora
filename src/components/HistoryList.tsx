@@ -4,7 +4,7 @@ import { useEvent } from "../lib/hooks";
 import { showContextMenu } from "../lib/contextMenu";
 import { isMod } from "../lib/shortcut";
 import { useListNav } from "../lib/useListNav";
-import { ClipRow, Empty, Preview } from "./ClipRow";
+import { ClipRow, Empty, imageFileName, Preview } from "./ClipRow";
 import { IconButton } from "./ui";
 
 interface Props {
@@ -51,6 +51,8 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
     onToast(c.pinned ? "Unpinned" : "Pinned");
   };
   const remove = (c: Clip) => api.deleteClip(c.id);
+  const saveImage = (c: Clip) =>
+    api.saveImage("history", c.id, imageFileName({ ...c, time: c.lastUsedAt })).catch((e) => onToast(String(e)));
 
   useEffect(() => {
     if (!active) return;
@@ -95,8 +97,8 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
             selected={i === selected}
             showSource={settings.showSourceApp}
             relative={settings.relativeTime}
-            onClick={() => setSelected(i)}
-            onDoubleClick={() => use(c, true)}
+            onClick={() => use(c, true)}
+            onSelect={() => setSelected(i)}
             onContextMenu={() =>
               showContextMenu([
                 { text: "Paste", accelerator: "Enter", action: () => use(c, true) },
@@ -108,6 +110,7 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
                       { text: "Paste in lowercase", action: () => api.useItem("history", c.id, true, c.content.toLowerCase()) },
                     ]
                   : []),
+                ...(c.kind === "image" ? ["-" as const, { text: "Save Image…", action: () => saveImage(c) }] : []),
                 "-",
                 { text: c.pinned ? "Unpin" : "Pin", accelerator: "CmdOrCtrl+P", action: () => togglePin(c) },
                 ...(c.kind === "text" ? [{ text: "Move to Secure Clips…", accelerator: "CmdOrCtrl+S", action: () => onMoveToSecure(c) }] : []),
@@ -118,6 +121,7 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
             }
             actions={
               <>
+                {c.kind === "image" && <IconButton icon="download" title="Save Image…" onClick={() => saveImage(c)} />}
                 <IconButton icon="pin" title={c.pinned ? "Unpin (⌘P)" : "Pin (⌘P)"} active={c.pinned} onClick={() => togglePin(c)} />
                 {c.kind === "text" && (
                   <IconButton icon="shield" title="Move to Secure Clips (⌘S)" onClick={() => onMoveToSecure(c)} />
@@ -133,7 +137,7 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
           </button>
         )}
       </div>
-      {settings.showPreview && <Preview d={cur ?? null} />}
+      {settings.showPreview && <Preview d={cur ?? null} onSave={cur?.kind === "image" ? () => saveImage(cur) : undefined} />}
     </>
   );
 }

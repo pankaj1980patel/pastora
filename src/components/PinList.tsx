@@ -16,7 +16,7 @@ import { useEvent } from "../lib/hooks";
 import { showContextMenu } from "../lib/contextMenu";
 import { isMod } from "../lib/shortcut";
 import { useListNav } from "../lib/useListNav";
-import { ClipRow, Empty, Preview } from "./ClipRow";
+import { ClipRow, Empty, imageFileName, Preview } from "./ClipRow";
 import { Icon } from "./Icon";
 import { Button, IconButton, inputClass } from "./ui";
 
@@ -39,6 +39,7 @@ function SortablePin(props: {
   onUse: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onSave?: () => void;
   onContextMenu: () => void;
 }) {
   const { pin, draggable } = props;
@@ -56,8 +57,8 @@ function SortablePin(props: {
       selected={props.selected}
       showSource={false}
       relative={props.settings.relativeTime}
-      onClick={props.onSelect}
-      onDoubleClick={props.onUse}
+      onClick={props.onUse}
+      onSelect={props.onSelect}
       onContextMenu={props.onContextMenu}
       leading={
         <button
@@ -65,6 +66,7 @@ function SortablePin(props: {
           {...attributes}
           {...listeners}
           tabIndex={-1}
+          onClick={(e) => e.stopPropagation()}
           title={draggable ? "Drag to reorder (⌥↑ / ⌥↓)" : "Clear the search to reorder"}
           className={`-ml-1 rounded p-0.5 text-neutral-400 ${draggable ? "cursor-grab hover:bg-black/10 active:cursor-grabbing dark:hover:bg-white/10" : "opacity-30"}`}
         >
@@ -73,6 +75,7 @@ function SortablePin(props: {
       }
       actions={
         <>
+          {props.onSave && <IconButton icon="download" title="Save Image…" onClick={props.onSave} />}
           <IconButton icon="edit" title="Rename / edit (⌘E)" onClick={props.onEdit} />
           <IconButton icon="trash" title="Unpin (⌘⌫)" onClick={props.onDelete} />
         </>
@@ -122,6 +125,8 @@ export function PinList({ query, settings, active, onToast, registerKeys, setMod
   const moveSelected = (delta: number) => moveTo(selected, selected + delta);
 
   const use = (p: Pin, paste: boolean) => api.useItem("pin", p.id, paste).catch((e) => onToast(String(e)));
+  const saveImage = (p: Pin) =>
+    api.saveImage("pin", p.id, imageFileName({ ...p, time: p.createdAt })).catch((e) => onToast(String(e)));
   const remove = async (p: Pin) => {
     await api.deletePin(p.id);
     onToast("Unpinned");
@@ -190,11 +195,13 @@ export function PinList({ query, settings, active, onToast, registerKeys, setMod
                   onUse={() => use(p, true)}
                   onEdit={() => setEditing(p)}
                   onDelete={() => remove(p)}
+                  onSave={p.kind === "image" ? () => saveImage(p) : undefined}
                   onContextMenu={() =>
                     showContextMenu([
                       { text: "Paste", accelerator: "Enter", action: () => use(p, true) },
                       { text: "Copy", accelerator: "CmdOrCtrl+Enter", action: () => use(p, false) },
                       "-",
+                      ...(p.kind === "image" ? [{ text: "Save Image…", action: () => saveImage(p) }] : []),
                       { text: "Rename / Edit…", accelerator: "CmdOrCtrl+E", action: () => setEditing(p) },
                       { text: "Move to Top", enabled: draggable && i > 0, action: () => moveTo(i, 0) },
                       { text: "Move Up", accelerator: "Alt+Up", enabled: draggable && i > 0, action: () => moveTo(i, i - 1) },
@@ -217,7 +224,7 @@ export function PinList({ query, settings, active, onToast, registerKeys, setMod
           </button>
         </div>
       )}
-      {settings.showPreview && pins[selected] && !editing && <Preview d={pins[selected]} />}
+      {settings.showPreview && pins[selected] && !editing && <Preview d={pins[selected]} onSave={pins[selected].kind === "image" ? () => saveImage(pins[selected]) : undefined} />}
       {editing && (
         <PinEditor
           pin={editing === "new" ? null : editing}

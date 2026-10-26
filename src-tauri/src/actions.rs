@@ -66,17 +66,21 @@ pub fn write_secret(app: &AppHandle, text: &str) -> u32 {
 
 /// After the clipboard is set: hide the popup, give focus back and (optionally) press Cmd+V.
 pub fn deliver(app: &AppHandle, paste: bool) {
+    // Without Accessibility we can't press Cmd+V. Keep the popup open so the user
+    // actually sees why, and let macOS show its permission prompt.
+    if paste && !platform::accessibility_trusted(false) {
+        toast(app, "Copied. Allow Accessibility in Settings to paste automatically.");
+        platform::accessibility_trusted(true);
+        return;
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         window::return_focus(&app);
         if !paste {
             return;
         }
-        if !platform::accessibility_trusted(false) {
-            toast(&app, "Copied. Allow Accessibility in Settings to paste automatically.");
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(180));
+        window::wait_for_previous_app(Duration::from_millis(600));
+        std::thread::sleep(Duration::from_millis(50));
         if let Err(e) = platform::send_paste() {
             log::warn!("paste failed: {e}");
         }

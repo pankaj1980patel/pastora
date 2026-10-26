@@ -55,7 +55,14 @@ fn capture(st: &AppState) -> Result<bool, String> {
     }
     let source_app = front.map(|f| f.1);
 
-    let clip = if !snap.files.is_empty() {
+    let image_file = match snap.files.as_slice() {
+        [f] if s.store_images && is_image_file(f) => capture_image_file(st, f, s.max_image_mb),
+        _ => None,
+    };
+    let clip = if let Some(mut c) = image_file {
+        c.source_app = source_app;
+        c
+    } else if !snap.files.is_empty() {
         let content = snap.files.join("\n");
         NewClip {
             kind: "files",
@@ -103,6 +110,46 @@ pub fn matches_ignore_pattern(patterns: &[String], text: &str) -> bool {
         .filter(|p| !p.trim().is_empty())
         .filter_map(|p| regex::Regex::new(p).ok())
         .any(|re| re.is_match(text))
+}
+
+const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "heic", "heif", "tiff", "tif", "webp", "bmp"];
+
+fn image_ext(path: &str) -> Option<String> {
+    let ext = std::path::Path::new(path).extension()?.to_str()?.to_lowercase();
+    IMAGE_EXTS.contains(&ext.as_str()).then_some(ext)
+}
+
+fn is_image_file(path: &str) -> bool {
+    image_ext(path).is_some()
+}
+
+/// A single copied image file (e.g. a screenshot in Finder) is kept as a picture, not a path,
+/// so it pastes as an image and doesn't make Finder ask to replace the original.
+/// Returns None to fall back to a plain files clip.
+fn capture_image_file(st: &AppState, src: &str, max_mb: u32) -> Option<NewClip> {
+    let ext = image_ext(src)?;
+    let bytes = std::fs::read(src).ok()?;
+    if max_mb > 0 && bytes.len() > max_mb as usize * 1024 * 1024 {
+        return None;
+    }
+    let hash = history::hash("image", &bytes);
+    let path = st.images_dir.join(format!("{hash}.{ext}"));
+    if !path.exists() {
+        std::fs::create_dir_all(&st.images_dir).ok()?;
+        std::fs::write(&path, &bytes).ok()?;
+    }
+    let path = path.to_string_lossy().to_string();
+    let size = platform::image_size(&path);
+    let name = std::path::Path::new(src).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    Some(NewClip {
+        kind: "image",
+        content: name,
+        image_path: Some(path),
+        hash,
+        source_app: None,
+        width: size.map(|s| s.0),
+        height: size.map(|s| s.1),
+    })
 }
 
 fn capture_image(st: &AppState, max_mb: u32) -> Result<Option<NewClip>, String> {

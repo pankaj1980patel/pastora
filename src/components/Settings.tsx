@@ -413,16 +413,23 @@ function Paste({ s, update }: { s: Settings; update: Update }) {
       {s.autoPaste && (
         <Row
           label="Accessibility permission"
-          hint={trusted ? "Pastora can paste for you." : "macOS needs your OK before Pastora can press ⌘V for you."}
+          hint={
+            trusted
+              ? "Pastora can paste for you."
+              : "macOS needs your OK before Pastora can press ⌘V for you. Already enabled? After an update macOS can keep an old entry. Click Reset, then turn Pastora on again."
+          }
         >
           {trusted ? (
             <span className="flex items-center gap-1 text-green-600">
               <Icon name="check" size={14} /> Allowed
             </span>
           ) : (
-            <Button variant="primary" onClick={() => api.requestAccessibility()}>
-              Open System Settings
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => api.resetAccessibility()}>Reset</Button>
+              <Button variant="primary" onClick={() => api.requestAccessibility()}>
+                Open System Settings
+              </Button>
+            </div>
           )}
         </Row>
       )}

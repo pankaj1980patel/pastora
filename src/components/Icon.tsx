@@ -23,6 +23,7 @@ const PATHS: Record<string, string> = {
   chevron: "M9 18l6-6-6-6",
   image: "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01",
   file: "M6 2h9l5 5v15H6zM14 2v6h6",
+  download: "M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4",
   clipboard: "M9 4h6v3H9zM9 5H6v16h12V5h-3",
   shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z",
   pause: "M8 5v14M16 5v14",

@@ -132,6 +132,7 @@ export const api = {
   clearHistory: () => invoke<void>("clear_history"),
   useItem: (source: "history" | "pin", id: number, paste: boolean, plain?: string) =>
     invoke<void>("use_item", { source, id, paste, plain: plain ?? null }),
+  saveImage: (source: "history" | "pin", id: number, name: string) => invoke<boolean>("save_image", { source, id, name }),
   pinClip: (id: number) => invoke<number>("pin_clip", { id }),
   unpinClip: (id: number) => invoke<void>("unpin_clip", { id }),
 
@@ -175,6 +176,7 @@ export const api = {
   runningApps: () => invoke<IgnoredApp[]>("running_apps"),
   accessibilityStatus: () => invoke<boolean>("accessibility_status"),
   requestAccessibility: () => invoke<boolean>("request_accessibility"),
+  resetAccessibility: () => invoke<boolean>("reset_accessibility"),
   openDataFolder: () => invoke<void>("open_data_folder"),
   openWebsite: () => invoke<void>("open_website"),
   openSettings: (section?: string) => invoke<void>("open_settings", { section: section ?? null }),

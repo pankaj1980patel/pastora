@@ -6,13 +6,18 @@ use core_foundation::string::{CFString, CFStringRef};
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use objc2::rc::Retained;
+use objc2::AnyThread;
 use objc2::runtime::{Bool, ProtocolObject};
 use objc2_app_kit::{
+    NSAnimatablePropertyContainer, NSAnimationContext, NSBitmapImageFileType, NSBitmapImageRep, NSImage, NSWindow,
     NSApplicationActivationOptions, NSApplicationActivationPolicy, NSPasteboard, NSPasteboardContentsOptions, NSRunningApplication, NSPasteboardItem, NSPasteboardTypeFileURL,
     NSPasteboardTypePNG, NSPasteboardTypeString, NSPasteboardTypeTIFF, NSPasteboardWriting, NSWorkspace,
 };
-use objc2_foundation::{NSArray, NSData, NSError, NSString, NSURL};
+use objc2_foundation::{NSArray, NSData, NSDictionary, NSError, NSString, NSURL};
 use objc2_local_authentication::{LAContext, LAPolicy};
+use std::cell::Cell;
+use std::ffi::c_void;
+use std::ptr::NonNull;
 use std::time::Duration;
 
 fn pb() -> Retained<NSPasteboard> {
@@ -104,6 +109,31 @@ pub fn write_png(png_bytes: &[u8]) -> i64 {
     write_items(vec![item], false)
 }
 
+fn load_image(path: &str) -> Option<Retained<NSImage>> {
+    NSImage::initWithContentsOfFile(NSImage::alloc(), &NSString::from_str(path))
+}
+
+/// Writes any image file macOS can read (JPEG, HEIC, GIF, TIFF…) as PNG + TIFF.
+pub fn write_image_file(path: &str) -> Option<i64> {
+    let tiff = load_image(path)?.TIFFRepresentation()?;
+    let png = NSBitmapImageRep::imageRepWithData(&tiff)
+        .and_then(|rep| unsafe { rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new()) });
+    let item = NSPasteboardItem::new();
+    if let Some(png) = png {
+        item.setData_forType(&png, unsafe { NSPasteboardTypePNG });
+    }
+    item.setData_forType(&tiff, unsafe { NSPasteboardTypeTIFF });
+    marker(&item, INTERNAL_TYPE);
+    Some(write_items(vec![item], false))
+}
+
+/// Pixel size of an image file.
+pub fn image_size(path: &str) -> Option<(i64, i64)> {
+    let reps = load_image(path)?.representations();
+    let rep = reps.iter().next()?;
+    Some((rep.pixelsWide() as i64, rep.pixelsHigh() as i64))
+}
+
 pub fn clear_clipboard() -> i64 {
     let pb = pb();
     pb.clearContents();
@@ -138,14 +168,14 @@ pub fn running_apps() -> Vec<(String, String)> {
 /// Simulates Cmd+V in the focused app. Needs Accessibility permission.
 pub fn send_paste() -> Result<(), String> {
     const KEY_V: u16 = 9;
-    let src = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).map_err(|_| "event source")?;
+    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState).map_err(|_| "event source")?;
     let down = CGEvent::new_keyboard_event(src.clone(), KEY_V, true).map_err(|_| "key event")?;
     down.set_flags(CGEventFlags::CGEventFlagCommand);
     let up = CGEvent::new_keyboard_event(src, KEY_V, false).map_err(|_| "key event")?;
     up.set_flags(CGEventFlags::CGEventFlagCommand);
-    down.post(CGEventTapLocation::HID);
+    down.post(CGEventTapLocation::Session);
     std::thread::sleep(Duration::from_millis(12));
-    up.post(CGEventTapLocation::HID);
+    up.post(CGEventTapLocation::Session);
     Ok(())
 }
 
@@ -168,6 +198,12 @@ pub fn accessibility_trusted(prompt: bool) -> bool {
         let opts = CFDictionary::from_CFType_pairs(&[(key, val)]);
         AXIsProcessTrustedWithOptions(opts.as_concrete_TypeRef())
     }
+}
+
+/// Drops macOS's Accessibility entry for this app. Needed when the app was rebuilt
+/// (ad-hoc signed): the old entry stays ticked in System Settings but no longer applies.
+pub fn reset_accessibility(bundle_id: &str) {
+    let _ = std::process::Command::new("tccutil").args(["reset", "Accessibility", bundle_id]).status();
 }
 
 pub fn open_accessibility_settings() {
@@ -209,7 +245,15 @@ pub fn biometric_auth(reason: &str) -> Result<(), String> {
         } else if err.is_null() {
             Err("Authentication failed".to_string())
         } else {
-            Err(unsafe { (*err).localizedDescription() }.to_string())
+            let err = unsafe { &*err };
+            // LAError codes. User/system/app cancel stay silent in the UI.
+            Err(match err.code() {
+                -2 | -4 | -9 => "cancelled".to_string(),
+                -7 => "No fingerprints are set up. Add one in System Settings → Touch ID & Password.".to_string(),
+                -8 => "Touch ID is locked. Unlock with your password.".to_string(),
+                -1004 => "Touch ID couldn't show its prompt. Click “Use Touch ID” to try again.".to_string(),
+                _ => err.localizedDescription().to_string(),
+            })
         };
         let _ = tx.send(res);
     });
@@ -220,7 +264,7 @@ pub fn biometric_auth(reason: &str) -> Result<(), String> {
             &block,
         )
     };
-    rx.recv_timeout(Duration::from_secs(120)).map_err(|_| "Timed out".to_string())?
+    rx.recv_timeout(Duration::from_secs(60)).map_err(|_| "Timed out".to_string())?
 }
 
 pub fn open_path(path: &std::path::Path) {
@@ -237,4 +281,46 @@ pub fn activate_pid(pid: i32) -> bool {
         Some(app) => app.activateWithOptions(NSApplicationActivationOptions::empty()),
         None => false,
     }
+}
+
+/// Fades a just-shown window in with a small downward slide. Main thread only.
+pub unsafe fn animate_in(ns_window: *mut c_void) {
+    let Some(w) = Retained::retain(ns_window as *mut NSWindow) else { return };
+    let end = w.frame();
+    let mut start = end;
+    if !NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion() {
+        start.origin.y += 8.0;
+    }
+    w.setAlphaValue(0.0);
+    w.setFrame_display(start, false);
+    let changes = block2::StackBlock::new(move |ctx: NonNull<NSAnimationContext>| {
+        ctx.as_ref().setDuration(0.16);
+        let a = w.animator();
+        a.setAlphaValue(1.0);
+        a.setFrame_display(end, true);
+    });
+    NSAnimationContext::runAnimationGroup(&changes);
+}
+
+/// Fades a window out, then calls `done` (which should hide it). Main thread only.
+/// `done` returns false if the window was re-shown meanwhile, so its alpha is left alone.
+pub unsafe fn animate_out(ns_window: *mut c_void, done: impl FnOnce() -> bool + 'static) {
+    let Some(w) = Retained::retain(ns_window as *mut NSWindow) else {
+        done();
+        return;
+    };
+    let w2 = w.clone();
+    let done = Cell::new(Some(done));
+    let changes = block2::StackBlock::new(move |ctx: NonNull<NSAnimationContext>| {
+        ctx.as_ref().setDuration(0.11);
+        w.animator().setAlphaValue(0.0);
+    });
+    let completion = block2::RcBlock::new(move || {
+        if let Some(f) = done.take() {
+            if f() {
+                w2.setAlphaValue(1.0);
+            }
+        }
+    });
+    NSAnimationContext::runAnimationGroup_completionHandler(&changes, Some(&completion));
 }

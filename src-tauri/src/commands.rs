@@ -7,8 +7,9 @@ use crate::state::{emit, state, toast};
 use crate::vault::{self, Entry, EntrySummary};
 use crate::{actions, keychain, platform, shortcuts, tray, window};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::Ordering;
-use tauri::{AppHandle, Emitter};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_autostart::ManagerExt;
 
 type Res<T> = Result<T, String>;
@@ -45,8 +46,13 @@ fn put_on_clipboard(app: &AppHandle, kind: &str, content: &str, image_path: Opti
     let cc = match kind {
         "files" => platform::write_files(&content.lines().map(String::from).collect::<Vec<_>>()),
         "image" => {
-            let bytes = std::fs::read(image_path.ok_or("missing image")?).map_err(|_| "Image file is missing")?;
-            platform::write_png(&bytes)
+            let path = image_path.ok_or("missing image")?;
+            if path.to_lowercase().ends_with(".png") {
+                let bytes = std::fs::read(path).map_err(|_| "Image file is missing")?;
+                platform::write_png(&bytes)
+            } else {
+                platform::write_image_file(path).ok_or("Image file is missing")?
+            }
         }
         _ => platform::write_text(content, false),
     };
@@ -74,6 +80,32 @@ pub fn use_item(app: AppHandle, source: String, id: i64, paste: bool, plain: Opt
     }
     actions::deliver(&app, paste && st.settings().auto_paste);
     Ok(())
+}
+
+/// Saves an image clip or pin to a file the user picks. Returns false if they cancel.
+#[tauri::command]
+pub async fn save_image(app: AppHandle, source: String, id: i64, name: String) -> Res<bool> {
+    let st = state(&app);
+    let (kind, image_path) = if source == "pin" {
+        let p = pins::get(&st.db(), id).map_err(err)?.ok_or("Pin not found")?;
+        (p.kind, p.image_path)
+    } else {
+        let c = history::get(&st.db(), id).map_err(err)?.ok_or("Item not found")?;
+        (c.kind, c.image_path)
+    };
+    let src = image_path.filter(|_| kind == "image").ok_or("Not an image")?;
+    let ext = std::path::Path::new(&src).extension().and_then(|e| e.to_str()).unwrap_or("png").to_string();
+
+    let mut dialog = app.dialog().file().set_file_name(&name).add_filter("Image", &[ext.as_str()]);
+    if let Ok(dir) = app.path().desktop_dir() {
+        dialog = dialog.set_directory(dir);
+    }
+    let picked = with_popup_modal(&app, || dialog.blocking_save_file());
+
+    let Some(dest) = picked.and_then(|p| p.into_path().ok()) else { return Ok(false) };
+    std::fs::copy(&src, &dest).map_err(|e| format!("Couldn't save image: {e}"))?;
+    toast(&app, "Image saved");
+    Ok(true)
 }
 
 #[tauri::command]
@@ -212,17 +244,35 @@ pub async fn vault_unlock(app: AppHandle, password: String) -> Res<()> {
     Ok(())
 }
 
-/// Runs a biometric prompt without the popup hiding itself when the system sheet takes focus.
-fn biometric_prompt(app: &AppHandle, reason: &str) -> Res<()> {
+/// Runs system UI (Touch ID, save panel) over the popup: the popup doesn't hide itself when
+/// that UI takes focus, and drops its always-on-top level so it can't cover it.
+fn with_popup_modal<T>(app: &AppHandle, f: impl FnOnce() -> T) -> T {
     let st = state(app);
+    let popup = window::popup(app);
     st.suppress_blur.store(true, Ordering::SeqCst);
-    let res = platform::biometric_auth(reason);
+    if let Some(w) = &popup {
+        let _ = w.set_always_on_top(false);
+    }
+    let res = f();
     st.suppress_blur.store(false, Ordering::SeqCst);
-    if let Some(w) = window::popup(app) {
+    if let Some(w) = &popup {
+        let _ = w.set_always_on_top(true);
         if w.is_visible().unwrap_or(false) {
             let _ = w.set_focus();
         }
     }
+    res
+}
+
+/// A Touch ID prompt is showing. A second one would cancel the first.
+static BIO_BUSY: AtomicBool = AtomicBool::new(false);
+
+fn biometric_prompt(app: &AppHandle, reason: &str) -> Res<()> {
+    if BIO_BUSY.swap(true, Ordering::SeqCst) {
+        return Err("cancelled".into());
+    }
+    let res = with_popup_modal(app, || platform::biometric_auth(reason));
+    BIO_BUSY.store(false, Ordering::SeqCst);
     res
 }
 
@@ -518,6 +568,12 @@ pub fn running_apps() -> Vec<RunningApp> {
 #[tauri::command]
 pub fn accessibility_status() -> bool {
     platform::accessibility_trusted(false)
+}
+
+#[tauri::command]
+pub fn reset_accessibility(app: AppHandle) -> bool {
+    platform::reset_accessibility(&app.config().identifier);
+    request_accessibility()
 }
 
 #[tauri::command]

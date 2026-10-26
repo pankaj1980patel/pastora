@@ -103,15 +103,28 @@ export function LockScreen({ status, onUnlocked, shownAt }: { status: VaultStatu
       onUnlocked();
     } catch (e) {
       const msg = errorText(e);
-      if (!/cancel/i.test(msg)) setError(msg);
+      if (msg !== "cancelled") setError(msg);
       input.current?.focus();
     }
   };
 
-  // Offer Touch ID straight away each time the popup opens on this tab.
+  // Offer Touch ID each time the popup opens on this tab. Wait until the popup is really
+  // in front (after its fade-in): macOS cancels a prompt started from the background.
   useEffect(() => {
-    if (canBio) bio();
-    else input.current?.focus();
+    if (!canBio) {
+      input.current?.focus();
+      return;
+    }
+    let timer: number | undefined;
+    const start = () => {
+      timer = window.setTimeout(bio, 200);
+    };
+    if (document.hasFocus()) start();
+    else window.addEventListener("focus", start, { once: true });
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", start);
+    };
   }, [shownAt]);
 
   const unlock = async () => {
