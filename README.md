@@ -17,7 +17,23 @@
 
 </div>
 
+<p align="center">
+  <img src="docs/assets/video/pastora-tour.gif" width="460" alt="Pastora popup: browsing clipboard history, image preview, search, pins and Secure Clips" />
+  <br /><sub><a href="docs/assets/video/pastora-tour.mp4">Watch in HD (MP4)</a></sub>
+</p>
+
 Pastora runs in your Mac's menu bar and remembers everything you copy. Press **⌘⇧V** to search your history, paste a pinned snippet, or unlock a password with **Touch ID**. It's built with Rust and Tauri, so the app is under 10 MB, starts at login, and keeps everything on your device.
+
+
+## Screenshots
+
+| History | Image preview | Pins |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/history.webp" width="260" alt="Clipboard history with source app and time" /> | <img src="docs/assets/screenshots/image-preview.webp" width="260" alt="Image clip with preview and Save button" /> | <img src="docs/assets/screenshots/pins.webp" width="260" alt="Pinned snippets you can drag to reorder" /> |
+| **Secure Clips** | **Secure entry** | **Live capture** |
+| <img src="docs/assets/screenshots/secure.webp" width="260" alt="Encrypted Secure Clips list" /> | <img src="docs/assets/screenshots/secure-detail.webp" width="260" alt="Login entry with one-time code" /> | <img src="docs/assets/video/pastora-capture.gif" width="260" alt="New copies appear at the top of history as you copy" /> |
+
+<p align="center"><img src="docs/assets/screenshots/settings.webp" width="640" alt="Pastora Settings window" /></p>
 
 ## Features
 
