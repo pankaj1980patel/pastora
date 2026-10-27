@@ -95,10 +95,11 @@ function Row({ label, hint, children }: { label: ReactNode; hint?: ReactNode; ch
   return (
     <div className="flex items-center gap-4 px-4 py-3">
       <div className="min-w-0 flex-1">
-        <div className="font-medium">{label}</div>
+        {label && <div className="font-medium">{label}</div>}
         {hint && <div className="mt-0.5 text-[12px] text-neutral-500">{hint}</div>}
       </div>
-      {children}
+      {/* Controls keep their natural width so they never squeeze or overlap the label and hint. */}
+      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
     </div>
   );
 }
@@ -567,14 +568,16 @@ function Secure({ s, update }: { s: Settings; update: Update }) {
             </Button>
           </Row>
           <Row label="Import backup" hint={status.unlocked ? "Entries are added to your current Secure Clips." : "Unlock Secure Clips first."}>
-            <input
-              type="password"
-              className={`${inputClass} w-44`}
-              placeholder="Backup's password"
-              value={importPw}
-              onChange={(e) => setImportPw(e.target.value)}
-              disabled={!status.unlocked}
-            />
+            <div className="w-44">
+              <input
+                type="password"
+                className={inputClass}
+                placeholder="Backup's password"
+                value={importPw}
+                onChange={(e) => setImportPw(e.target.value)}
+                disabled={!status.unlocked}
+              />
+            </div>
             <Button
               disabled={!status.unlocked || !importPw}
               onClick={async () => {
