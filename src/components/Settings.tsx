@@ -367,6 +367,7 @@ const POPUP_KEYS: [string, string][] = [
   [keys("⌘U / ⌘T"), "Paste username / one-time code (Secure)"],
   [keys("⌘L"), "Paste username, then password (Secure)"],
   ["→", "Open secure clip details"],
+  [keys("⌘Y"), "View full item (History)"],
   [keys("⌘,"), "Open Settings"],
   ["⎋", "Clear search, go back or close"],
 ];

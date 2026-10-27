@@ -1,6 +1,6 @@
 [package]
 name = "pastora"
-version = "0.1.1"
+version = "0.1.2"
 description = "Clipboard manager for Mac with history, pins and Touch ID secure clips"
 edition = "2021"
 license = "MIT"

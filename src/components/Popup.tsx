@@ -151,6 +151,7 @@ export function Popup({ settings }: { settings: Settings }) {
             active
             onToast={toast}
             registerKeys={registerKeys}
+            setModal={setModal}
             onMoveToSecure={(c) => {
               if (c.kind !== "text") return;
               setPending(c);

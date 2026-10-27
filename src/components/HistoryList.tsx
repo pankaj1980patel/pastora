@@ -5,6 +5,7 @@ import { showContextMenu } from "../lib/contextMenu";
 import { isMod, keys } from "../lib/shortcut";
 import { useListNav } from "../lib/useListNav";
 import { ClipRow, Empty, imageFileName, Preview } from "./ClipRow";
+import { ClipViewer } from "./ClipViewer";
 import { IconButton } from "./ui";
 
 interface Props {
@@ -14,14 +15,17 @@ interface Props {
   onToast: (m: string) => void;
   onMoveToSecure: (clip: Clip) => void;
   registerKeys: (h: (e: KeyboardEvent) => boolean) => void;
+  setModal: (open: boolean) => void;
 }
 
 const PAGE = 100;
 
-export function HistoryList({ query, settings, active, onToast, onMoveToSecure, registerKeys }: Props) {
+export function HistoryList({ query, settings, active, onToast, onMoveToSecure, registerKeys, setModal }: Props) {
   const [items, setItems] = useState<Clip[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const { selected, setSelected, move, listRef } = useListNav(items.length, query);
+  const [viewing, setViewing] = useState<Clip | null>(null);
+  useEffect(() => setModal(viewing !== null), [viewing]);
 
   const load = useCallback(async () => {
     const rows = await api.listHistory(query, PAGE, 0);
@@ -68,6 +72,7 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
         return true;
       }
       if (!cur) return false;
+      if (isMod(e) && e.key.toLowerCase() === "y") return setViewing(cur), true;
       if (e.key === "Enter") return use(cur, !isMod(e)), true;
       if (isMod(e) && e.key.toLowerCase() === "c" && !window.getSelection()?.toString()) return use(cur, false), true;
       if (isMod(e) && e.key.toLowerCase() === "p") return togglePin(cur), true;
@@ -101,6 +106,8 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
             onSelect={() => setSelected(i)}
             onContextMenu={() =>
               showContextMenu([
+                { text: "View", accelerator: "CmdOrCtrl+Y", action: () => setViewing(c) },
+                "-",
                 { text: "Paste", accelerator: "Enter", action: () => use(c, true) },
                 { text: "Copy", accelerator: "CmdOrCtrl+Enter", action: () => use(c, false) },
                 ...(c.kind === "text"
@@ -121,6 +128,7 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
             }
             actions={
               <>
+                <IconButton icon="eye" title={keys("View (⌘Y)")} onClick={() => setViewing(c)} />
                 {c.kind === "image" && <IconButton icon="download" title="Save Image…" onClick={() => saveImage(c)} />}
                 <IconButton icon="pin" title={c.pinned ? keys("Unpin (⌘P)") : keys("Pin (⌘P)")} active={c.pinned} onClick={() => togglePin(c)} />
                 {c.kind === "text" && (
@@ -138,6 +146,17 @@ export function HistoryList({ query, settings, active, onToast, onMoveToSecure, 
         )}
       </div>
       {settings.showPreview && <Preview d={cur ?? null} onSave={cur?.kind === "image" ? () => saveImage(cur) : undefined} />}
+      {viewing && (
+        <ClipViewer
+          d={{ ...viewing, time: viewing.lastUsedAt }}
+          onUse={(paste) => {
+            setViewing(null);
+            use(viewing, paste);
+          }}
+          onSave={viewing.kind === "image" ? () => saveImage(viewing) : undefined}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </>
   );
 }
