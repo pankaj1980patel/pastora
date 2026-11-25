@@ -120,12 +120,18 @@ export interface Settings {
   relativeTime: boolean;
   onboarded: boolean;
   checkUpdates: boolean;
+  autoDownloadUpdates: boolean;
 }
+
+export type UpdateStage = "available" | "downloading" | "ready" | "installing" | "failed";
 
 export interface UpdateInfo {
   version: string;
+  /** Manual download, for when the update can't be installed in place. */
   url: string;
   notesUrl: string;
+  stage: UpdateStage;
+  error: string | null;
 }
 
 export interface UpdateStatus {
@@ -195,6 +201,8 @@ export const api = {
   resetAccessibility: () => invoke<boolean>("reset_accessibility"),
   updateStatus: () => invoke<UpdateStatus>("update_status"),
   checkUpdatesNow: () => invoke<UpdateStatus>("check_updates_now"),
+  /** Installs the new version (downloading it first if needed) and restarts Pastora. */
+  installUpdate: () => invoke<void>("install_update"),
   dismissUpdate: (version: string) => invoke<void>("dismiss_update", { version }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),
   openDataFolder: () => invoke<void>("open_data_folder"),

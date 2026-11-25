@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
-import { api, Settings } from "./api";
+import { api, Settings, UpdateInfo, UpdateStatus } from "./api";
 
 /** Runs `handler` whenever the backend emits `event`. */
 export function useEvent<T = unknown>(event: string, handler: (payload: T) => void) {
@@ -26,6 +26,34 @@ export function useDebounced<T>(value: T, ms: number, now?: (v: T) => boolean): 
     return () => clearTimeout(t);
   }, [value]);
   return v;
+}
+
+/** Update status, kept in sync with the backend's download / install progress. */
+export function useUpdateStatus(): [UpdateStatus | null, (s: UpdateStatus) => void] {
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const load = () => {
+    api.updateStatus().then(setStatus);
+  };
+  useEffect(load, []);
+  useEvent("update-changed", load);
+  useEvent("popup-shown", load);
+  return [status, setStatus];
+}
+
+/** What the update is doing, in a few words. */
+export function updateText(u: UpdateInfo): string {
+  switch (u.stage) {
+    case "downloading":
+      return `Downloading Pastora ${u.version}…`;
+    case "ready":
+      return `Pastora ${u.version} is ready.`;
+    case "installing":
+      return `Installing Pastora ${u.version}…`;
+    case "failed":
+      return `Pastora ${u.version} is available. It couldn't be installed automatically.`;
+    default:
+      return `Pastora ${u.version} is available.`;
+  }
 }
 
 /** Current settings, kept in sync across windows. */

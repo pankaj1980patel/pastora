@@ -1,8 +1,8 @@
 import logo from "../assets/logo.png";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import { ReactNode, useEffect, useState } from "react";
-import { api, AppInfo, errorText, IgnoredApp, Settings, Shortcuts, UpdateStatus, VaultStatus } from "../lib/api";
-import { useEvent } from "../lib/hooks";
+import { api, AppInfo, errorText, IgnoredApp, Settings, Shortcuts, VaultStatus } from "../lib/api";
+import { updateText, useEvent, useUpdateStatus } from "../lib/hooks";
 import { acceleratorFromEvent, displayAccelerator, isMac, keys } from "../lib/shortcut";
 import { Icon } from "./Icon";
 import { Button, inputClass, Kbd, Toggle } from "./ui";
@@ -137,6 +137,9 @@ function General({ s, update }: { s: Settings; update: Update }) {
         </Row>
         <Row label="Check for updates" hint="Asks GitHub once a day whether a newer version is out. Nothing else is sent.">
           <Toggle checked={s.checkUpdates} onChange={(v) => update({ checkUpdates: v })} />
+        </Row>
+        <Row label="Download updates automatically" hint="Gets a new version ready in the background. Pastora only restarts when you click Restart to update.">
+          <Toggle checked={s.autoDownloadUpdates} disabled={!s.checkUpdates} onChange={(v) => update({ autoDownloadUpdates: v })} />
         </Row>
         <Row label="Open popup" hint="Where the popup appears when you press the shortcut. Clicking the menu bar icon always drops it down below the icon.">
           <Select
@@ -710,14 +713,17 @@ function Data() {
 
 function About() {
   const [info, setInfo] = useState<AppInfo | null>(null);
-  const [upd, setUpd] = useState<UpdateStatus | null>(null);
+  const [upd, setUpd] = useUpdateStatus();
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const [updErr, setUpdErr] = useState("");
   useEffect(() => {
     api.appInfo().then(setInfo);
-    api.updateStatus().then(setUpd);
   }, []);
+  const install = () => {
+    setUpdErr("");
+    api.installUpdate().catch((e) => setUpdErr(errorText(e)));
+  };
   const checkNow = async () => {
     setChecking(true);
     setUpdErr("");
@@ -737,11 +743,23 @@ function About() {
       <div className="text-neutral-500">Version {info?.version}</div>
       <div className="flex flex-col items-center gap-1 text-[0.9rem]">
         {upd?.update ? (
-          <div className="flex items-center gap-2">
-            <span>Pastora {upd.update.version} is available.</span>
-            <Button variant="primary" onClick={() => api.openUrl(upd.update!.url)}>
-              <Icon name="download" size={13} /> Download
-            </Button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <span>{updateText(upd.update)}</span>
+            {upd.update.stage === "ready" && (
+              <Button variant="primary" onClick={install}>
+                Restart to update
+              </Button>
+            )}
+            {upd.update.stage === "available" && (
+              <Button variant="primary" onClick={install}>
+                <Icon name="download" size={13} /> Update
+              </Button>
+            )}
+            {upd.update.stage === "failed" && (
+              <Button variant="primary" onClick={() => api.openUrl(upd.update!.url)}>
+                <Icon name="download" size={13} /> Download
+              </Button>
+            )}
             <Button onClick={() => api.openUrl(upd.update!.notesUrl)}>What's new</Button>
           </div>
         ) : (
@@ -753,7 +771,7 @@ function About() {
         {updErr && <span className="text-red-500">{updErr}</span>}
       </div>
       <p className="max-w-sm text-neutral-500">
-        Clipboard history, pins and encrypted Secure Clips. Everything stays on your device. The only request Pastora makes is the daily update check, which you can turn off in General.
+        Clipboard history, pins and encrypted Secure Clips. Everything stays on your device. The only requests Pastora makes are the daily update check and downloading updates, which you can turn off in General.
       </p>
       <button className="text-indigo-500 hover:underline" onClick={() => api.openWebsite()}>
         github.com/pankaj1980patel/pastora

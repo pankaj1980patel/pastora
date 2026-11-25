@@ -30,6 +30,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
             let data_dir = app.path().app_data_dir()?;
@@ -118,6 +119,7 @@ pub fn run() {
             commands::finish_onboarding,
             commands::update_status,
             commands::check_updates_now,
+            commands::install_update,
             commands::dismiss_update,
             commands::open_url,
         ])

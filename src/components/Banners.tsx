@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, Settings, UpdateStatus } from "../lib/api";
-import { useEvent } from "../lib/hooks";
+import { api, Settings } from "../lib/api";
+import { updateText, useEvent, useUpdateStatus } from "../lib/hooks";
 import { isMac } from "../lib/shortcut";
 import { Icon } from "./Icon";
 
@@ -59,13 +59,7 @@ function AccessBanner({ settings }: { settings: Settings }) {
 }
 
 function UpdateBanner() {
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
-  const load = () => api.updateStatus().then(setStatus);
-  useEffect(() => {
-    load();
-  }, []);
-  useEvent("update-available", load);
-  useEvent("popup-shown", load);
+  const [status, setStatus] = useUpdateStatus();
   const u = status?.update;
   if (!u || status?.dismissed) return null;
   return (
@@ -77,10 +71,23 @@ function UpdateBanner() {
         setStatus({ ...status!, dismissed: true });
       }}
     >
-      <span>Pastora {u.version} is available.</span>
-      <button className={linkBtn} onClick={() => api.openUrl(u.url)}>
-        Download
-      </button>
+      <span>{updateText(u)}</span>
+      {u.stage === "ready" && (
+        // Errors come back as the "failed" stage, which offers the download instead.
+        <button className={linkBtn} onClick={() => api.installUpdate().catch(() => {})}>
+          Restart to update
+        </button>
+      )}
+      {u.stage === "available" && (
+        <button className={linkBtn} onClick={() => api.installUpdate().catch(() => {})}>
+          Update
+        </button>
+      )}
+      {u.stage === "failed" && (
+        <button className={linkBtn} title={u.error ?? undefined} onClick={() => api.openUrl(u.url)}>
+          Download
+        </button>
+      )}
       <button className={linkBtn} onClick={() => api.openUrl(u.notesUrl)}>
         What's new
       </button>

@@ -39,7 +39,7 @@ data-encoding = "2"
 keyring = { version = "3", features = ["apple-native"] }
 uuid = { version = "1", features = ["v4"] }
 log = "0.4"
-ureq = { version = "2", features = ["json"] }
+tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

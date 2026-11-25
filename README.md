@@ -116,6 +116,9 @@ cd src-tauri && cargo test # run the Rust unit tests
 1. Bump the version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json`.
 2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. The **Release** workflow builds a universal DMG and creates a draft release. Review it and click **Publish**.
+   It also signs the update packages and writes `latest.json`, which installed copies update from. Signing uses the
+   `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets; the matching public key is in
+   `tauri.conf.json`. Keep a backup of the private key: without it, no update can reach installed copies.
 
 ## Keyboard shortcuts
 
@@ -137,7 +140,8 @@ cd src-tauri && cargo test # run the Rust unit tests
 - [x] Windows and Linux basics: history, pins, image clips, paste, Secure Clips with password
 - [ ] Linux: Wayland shortcuts, Secret Service, fprintd fingerprint
 - [ ] Windows: Windows Hello, Credential Manager, ignored-apps picker
-- [ ] Signed and notarized releases with auto-update
+- [x] Auto-update: signed updates download in the background, installed on "Restart to update"
+- [ ] Signed and notarized macOS releases
 
 ## Tech stack
 

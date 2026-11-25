@@ -75,6 +75,8 @@ pub struct Settings {
     pub onboarded: bool,
     /// Check GitHub once a day for a newer release.
     pub check_updates: bool,
+    /// Download a newer release in the background, ready for "Restart to update".
+    pub auto_download_updates: bool,
 }
 
 impl Default for Settings {
@@ -115,6 +117,7 @@ impl Default for Settings {
             relative_time: true,
             onboarded: false,
             check_updates: true,
+            auto_download_updates: true,
         }
     }
 }

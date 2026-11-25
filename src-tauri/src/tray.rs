@@ -81,11 +81,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 crate::platform::accessibility_trusted(true);
                 crate::platform::open_accessibility_settings();
             }
-            "update" => {
-                if let Some(u) = state(app).update.lock().unwrap().clone() {
-                    crate::platform::open_path(std::path::Path::new(&u.url));
-                }
-            }
+            "update" => crate::updates::tray_clicked(app),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -109,7 +105,16 @@ pub fn refresh(app: &AppHandle) {
         let _ = t.pause.set_checked(s.is_paused(crate::db::now_ms()));
         let _ = t.autostart.set_checked(s.launch_at_login);
         if let Some(u) = &update {
-            let _ = t.update.set_text(format!("Update Available: Pastora {}…", u.version));
+            use crate::updates::Stage;
+            let text = match u.stage {
+                Stage::Ready => format!("Restart to Update to Pastora {}", u.version),
+                Stage::Downloading => format!("Downloading Pastora {}…", u.version),
+                Stage::Installing => format!("Installing Pastora {}…", u.version),
+                Stage::Failed => format!("Download Pastora {}…", u.version),
+                Stage::Available => format!("Update to Pastora {}…", u.version),
+            };
+            let _ = t.update.set_text(text);
+            let _ = t.update.set_enabled(!matches!(u.stage, Stage::Downloading | Stage::Installing));
         }
         // Both optional items sit at the top of the menu: update first, then accessibility.
         if t.shown_access != need_access {

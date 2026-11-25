@@ -700,8 +700,14 @@ pub fn update_status(app: AppHandle) -> crate::updates::UpdateStatus {
 
 #[tauri::command]
 pub async fn check_updates_now(app: AppHandle) -> Res<crate::updates::UpdateStatus> {
-    crate::updates::check(&app).map_err(|e| format!("Couldn't check for updates: {e}"))?;
+    crate::updates::check(&app).await.map_err(|e| format!("Couldn't check for updates: {e}"))?;
     Ok(crate::updates::status(&app))
+}
+
+/// Installs the new version (downloading it first if needed) and restarts Pastora.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Res<()> {
+    crate::updates::install(&app).await
 }
 
 #[tauri::command]

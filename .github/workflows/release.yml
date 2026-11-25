@@ -54,23 +54,31 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
       - run: npm ci
-      - run: npm run tauri build -- ${{ matrix.args }}
+      # Update packages are only made here, where the signing key is: building from source needs no key.
+      - run: npm run tauri build -- ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+        env:
+          # Signs the update packages; the app only installs updates signed with this key.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - name: Collect files
         shell: bash
         run: |
           ver=$(node -p "require('./src-tauri/tauri.conf.json').version")
           b="${{ matrix.bundle }}"
           mkdir out
+          # Copies a file and its update signature (.sig), if the build made one.
+          put() { cp $1 "out/$2"; for s in $1.sig; do [ -f "$s" ] && cp "$s" "out/$2.sig"; done; true; }
           case "${{ matrix.name }}" in
             macOS)
               cp "$b"/dmg/*.dmg "out/Pastora_${ver}_macOS_universal.dmg"
-              ditto -c -k --keepParent "$b/macos/Pastora.app" "out/Pastora_${ver}_macOS_universal.app.zip" ;;
+              ditto -c -k --keepParent "$b/macos/Pastora.app" "out/Pastora_${ver}_macOS_universal.app.zip"
+              put "$b/macos/Pastora.app.tar.gz" "Pastora_${ver}_macOS_universal.app.tar.gz" ;;
             Windows)
-              cp "$b"/msi/*.msi "out/Pastora_${ver}_Windows_x64.msi"
-              cp "$b"/nsis/*.exe "out/Pastora_${ver}_Windows_x64-setup.exe" ;;
+              put "$b/msi/*.msi" "Pastora_${ver}_Windows_x64.msi"
+              put "$b/nsis/*.exe" "Pastora_${ver}_Windows_x64-setup.exe" ;;
             Linux)
-              cp "$b"/deb/*.deb "out/Pastora_${ver}_Linux_amd64.deb"
-              cp "$b"/appimage/*.AppImage "out/Pastora_${ver}_Linux_x86_64.AppImage" ;;
+              put "$b/deb/*.deb" "Pastora_${ver}_Linux_amd64.deb"
+              put "$b/appimage/*.AppImage" "Pastora_${ver}_Linux_x86_64.AppImage" ;;
           esac
           ls -l out
       - uses: actions/upload-artifact@v4
@@ -90,6 +98,34 @@ jobs:
         with:
           path: out
           merge-multiple: true
+      - name: Write latest.json (what installed apps update from)
+        run: |
+          ver="${TAG#v}"
+          base="https://github.com/$GH_REPO/releases/download/$TAG"
+          # platform key -> file; the updater tries "<os>-<arch>-<installer>" first, then "<os>-<arch>".
+          entries=(
+            "darwin-aarch64 Pastora_${ver}_macOS_universal.app.tar.gz"
+            "darwin-x86_64 Pastora_${ver}_macOS_universal.app.tar.gz"
+            "windows-x86_64 Pastora_${ver}_Windows_x64-setup.exe"
+            "windows-x86_64-nsis Pastora_${ver}_Windows_x64-setup.exe"
+            "windows-x86_64-msi Pastora_${ver}_Windows_x64.msi"
+            "linux-x86_64 Pastora_${ver}_Linux_x86_64.AppImage"
+            "linux-x86_64-appimage Pastora_${ver}_Linux_x86_64.AppImage"
+            "linux-x86_64-deb Pastora_${ver}_Linux_amd64.deb"
+          )
+          platforms='{}'
+          for e in "${entries[@]}"; do
+            read -r key file <<< "$e"
+            sig="out/$file.sig"
+            if [ -f "$sig" ]; then
+              platforms=$(jq --arg k "$key" --arg s "$(cat "$sig")" --arg u "$base/$file" '. + {($k): {signature: $s, url: $u}}' <<< "$platforms")
+            fi
+          done
+          # Without macOS and Windows entries installed apps would never update: fail loudly.
+          jq -e 'has("darwin-aarch64") and has("windows-x86_64")' <<< "$platforms" > /dev/null
+          jq -n --arg v "$ver" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg n "See $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$TAG" \
+            --argjson p "$platforms" '{version: $v, notes: $n, pub_date: $d, platforms: $p}' > out/latest.json
+          cat out/latest.json
       - name: Upload to the release
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
@@ -100,5 +136,5 @@ jobs:
         run: |
           mkdir all
           gh release download "$TAG" --dir all --pattern 'Pastora_*'
-          (cd all && sha256sum Pastora_* > SHA256SUMS.txt)
+          (cd all && sha256sum $(ls Pastora_* | grep -v '\.sig$') > SHA256SUMS.txt)
           gh release upload "$TAG" all/SHA256SUMS.txt --clobber
