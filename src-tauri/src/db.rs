@@ -71,6 +71,14 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute_batch(SCHEMA_V1)?;
         conn.execute_batch("PRAGMA user_version = 1")?;
     }
+    if version < 2 {
+        // Image clean-up looks clips up by file; every listed clip checks whether it is pinned.
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS clips_image ON clips(image_path);
+             CREATE INDEX IF NOT EXISTS pins_kind_content ON pins(kind, content);
+             PRAGMA user_version = 2;",
+        )?;
+    }
     Ok(())
 }
 

@@ -259,8 +259,13 @@ export function EntryEditor({ entryId, prefill, onClose, onSaved, onDeleted }: P
             <Button
               variant="danger"
               onClick={async () => {
-                await api.vaultDelete(entry.id);
-                onDeleted();
+                try {
+                  await api.vaultDelete(entry.id);
+                  onDeleted();
+                } catch (e) {
+                  setError(errorText(e));
+                  setConfirmDelete(false);
+                }
               }}
             >
               Really delete?

@@ -37,7 +37,7 @@ function TotpValue({ entryId, field }: { entryId: string; field: FieldSummary })
     <span className="flex items-center gap-2 font-mono tracking-widest">
       {code.code.slice(0, 3)} {code.code.slice(3)}
       <span className={code.remaining <= 5 ? "text-red-500" : "text-neutral-400"}>
-        <Countdown key={code.code} seconds={30} size={13} />
+        <Countdown key={code.code} seconds={30} initial={code.remaining} size={13} />
       </span>
     </span>
   );

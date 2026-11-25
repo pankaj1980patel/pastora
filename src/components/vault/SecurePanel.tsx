@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, Clip, EntrySummary, errorText, FieldSummary, VaultStatus } from "../../lib/api";
 import { useEvent } from "../../lib/hooks";
 import { showContextMenu } from "../../lib/contextMenu";
@@ -33,25 +33,30 @@ export function SecurePanel({ query, active, shownAt, pending, clearPending, onT
   const visible = entries.filter((e) => matches(e, query.trim()));
   const { selected, setSelected, move, listRef } = useListNav(visible.length, query);
 
+  const req = useRef(0); // only the newest refresh may update the panel
   const refresh = useCallback(async () => {
-    const s = await api.vaultStatus();
-    setStatus(s);
-    onLockedChange(!s.unlocked);
-    if (s.unlocked) setEntries(await api.vaultList());
-    else {
-      setEntries([]);
-      setView({ kind: "list" });
+    const id = ++req.current;
+    try {
+      const s = await api.vaultStatus();
+      const list = s.unlocked ? await api.vaultList() : [];
+      if (id !== req.current) return;
+      setStatus(s);
+      onLockedChange(!s.unlocked);
+      setEntries(list);
+      if (!s.unlocked) setView({ kind: "list" });
+    } catch (e) {
+      if (id === req.current) onToast(errorText(e));
     }
   }, []);
 
+  // The popup remounts this panel each time it opens, so mounting is the "opened" refresh.
   useEffect(() => {
     refresh();
   }, [refresh]);
   useEvent("vault-changed", refresh);
   useEvent("settings-changed", refresh);
-  useEffect(() => {
-    if (active) refresh();
-  }, [active, shownAt]);
+  // Don't leave the popup's keyboard handling switched off if unmounted mid-edit.
+  useEffect(() => () => setModal(false), []);
 
   // "Move to Secure Clips" from history: open the editor once unlocked.
   useEffect(() => {
@@ -102,7 +107,9 @@ export function SecurePanel({ query, active, shownAt, pending, clearPending, onT
     view.kind === "detail" ? entries.find((e) => e.id === view.id) : visible[selected];
 
   useEffect(() => {
-    if (!active || !status?.unlocked || view.kind === "edit") return;
+    if (!active) return;
+    // Locked or editing: no list shortcuts (and no stale handler from an unlocked render).
+    if (!status?.unlocked || view.kind === "edit") return registerKeys(() => false);
     registerKeys((e) => {
       const k = e.key.toLowerCase();
       if (isMod(e) && k === "n") return setView({ kind: "edit", id: null }), true;
@@ -139,7 +146,8 @@ export function SecurePanel({ query, active, shownAt, pending, clearPending, onT
         }}
         onSaved={async (id) => {
           if (view.prefill && pending) {
-            await api.deleteClip(pending.id); // it now lives (encrypted) in Secure Clips
+            // It now lives (encrypted) in Secure Clips.
+            await api.deleteClip(pending.id).catch((e) => onToast(errorText(e)));
             clearPending();
           }
           await refresh();

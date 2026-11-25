@@ -14,6 +14,20 @@ export function useEvent<T = unknown>(event: string, handler: (payload: T) => vo
   }, [event]);
 }
 
+/** `value`, updated only after it has stopped changing for `ms` (or at once when `now(value)`). */
+export function useDebounced<T>(value: T, ms: number, now?: (v: T) => boolean): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    if (now?.(value)) {
+      setV(value);
+      return;
+    }
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value]);
+  return v;
+}
+
 /** Current settings, kept in sync across windows. */
 export function useSettings(): [Settings | null, (s: Settings) => void] {
   const [settings, setSettings] = useState<Settings | null>(null);

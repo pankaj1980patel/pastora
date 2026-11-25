@@ -10,8 +10,8 @@ import {
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useCallback, useEffect, useState } from "react";
-import { api, Pin, Settings } from "../lib/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, errorText, Pin, Settings } from "../lib/api";
 import { useEvent } from "../lib/hooks";
 import { showContextMenu } from "../lib/contextMenu";
 import { isMod, keys } from "../lib/shortcut";
@@ -87,15 +87,28 @@ function SortablePin(props: {
 export function PinList({ query, settings, active, onToast, registerKeys, setModal }: Props) {
   const [pins, setPins] = useState<Pin[]>([]);
   const [editing, setEditing] = useState<Pin | "new" | null>(null);
-  const { selected, setSelected, move, listRef } = useListNav(pins.length, query);
+  const { selected, setSelected, move, listRef, reset } = useListNav(pins.length, query);
   const draggable = query.trim() === "";
 
-  const load = useCallback(() => api.listPins(query).then(setPins), [query]);
+  const req = useRef(0); // only the newest request may update the list
+  const load = useCallback(async () => {
+    const id = ++req.current;
+    try {
+      const rows = await api.listPins(query);
+      if (id === req.current) setPins(rows);
+    } catch (e) {
+      if (id === req.current) onToast(errorText(e));
+    }
+  }, [query]);
   useEffect(() => {
     load();
   }, [load]);
   useEvent("pins-changed", load);
-  useEvent("popup-shown", load);
+  useEvent("popup-shown", () => {
+    reset();
+    // A non-empty query is cleared by the popup, which reloads through `load` changing.
+    if (!query) load();
+  });
   useEffect(() => setModal(editing !== null), [editing]);
 
   const sensors = useSensors(
@@ -105,7 +118,10 @@ export function PinList({ query, settings, active, onToast, registerKeys, setMod
 
   const saveOrder = (next: Pin[]) => {
     setPins(next);
-    api.reorderPins(next.map((p) => p.id));
+    api.reorderPins(next.map((p) => p.id)).catch((e) => {
+      onToast(errorText(e));
+      load(); // show the order that was actually saved
+    });
   };
 
   const onDragEnd = (e: DragEndEvent) => {
@@ -124,12 +140,16 @@ export function PinList({ query, settings, active, onToast, registerKeys, setMod
   };
   const moveSelected = (delta: number) => moveTo(selected, selected + delta);
 
-  const use = (p: Pin, paste: boolean) => api.useItem("pin", p.id, paste).catch((e) => onToast(String(e)));
+  const use = (p: Pin, paste: boolean) => api.useItem("pin", p.id, paste).catch((e) => onToast(errorText(e)));
   const saveImage = (p: Pin) =>
-    api.saveImage("pin", p.id, imageFileName({ ...p, time: p.createdAt })).catch((e) => onToast(String(e)));
+    api.saveImage("pin", p.id, imageFileName({ ...p, time: p.createdAt })).catch((e) => onToast(errorText(e)));
   const remove = async (p: Pin) => {
-    await api.deletePin(p.id);
-    onToast("Unpinned");
+    try {
+      await api.deletePin(p.id);
+      onToast("Unpinned");
+    } catch (e) {
+      onToast(errorText(e));
+    }
   };
 
   useEffect(() => {

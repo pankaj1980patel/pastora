@@ -20,12 +20,18 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 
 // ---------------- History ----------------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_history(app: AppHandle, query: String, limit: i64, offset: i64) -> Res<Vec<Clip>> {
     history::list(&state(&app).db(), query.trim(), limit, offset).map_err(err)
 }
 
-#[tauri::command]
+/// The full clip (`list_history` only returns a preview of long text).
+#[tauri::command(async)]
+pub fn get_clip(app: AppHandle, id: i64) -> Res<Clip> {
+    history::get(&state(&app).db(), id).map_err(err)?.ok_or_else(|| "Item not found".into())
+}
+
+#[tauri::command(async)]
 pub fn delete_clip(app: AppHandle, id: i64) -> Res<()> {
     let st = state(&app);
     history::delete(&st.db(), id, &st.images_dir).map_err(err)?;
@@ -33,7 +39,7 @@ pub fn delete_clip(app: AppHandle, id: i64) -> Res<()> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_history(app: AppHandle) -> Res<()> {
     let st = state(&app);
     history::clear(&st.db(), &st.images_dir).map_err(err)?;
@@ -61,7 +67,7 @@ fn put_on_clipboard(app: &AppHandle, kind: &str, content: &str, image_path: Opti
 }
 
 /// Puts a history item or pin on the clipboard. `paste` also presses Cmd+V in the previous app.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn use_item(app: AppHandle, source: String, id: i64, paste: bool, plain: Option<String>) -> Res<()> {
     let st = state(&app);
     // `plain` lets the UI paste a transformed version (e.g. trimmed / UPPERCASE).
@@ -108,7 +114,7 @@ pub async fn save_image(app: AppHandle, source: String, id: i64, name: String) -
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pin_clip(app: AppHandle, id: i64) -> Res<i64> {
     let st = state(&app);
     let db = st.db();
@@ -120,7 +126,7 @@ pub fn pin_clip(app: AppHandle, id: i64) -> Res<i64> {
     Ok(pid)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn unpin_clip(app: AppHandle, id: i64) -> Res<()> {
     let st = state(&app);
     let db = st.db();
@@ -134,12 +140,12 @@ pub fn unpin_clip(app: AppHandle, id: i64) -> Res<()> {
 
 // ---------------- Pins ----------------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_pins(app: AppHandle, query: String) -> Res<Vec<Pin>> {
     pins::list(&state(&app).db(), query.trim()).map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn add_pin(app: AppHandle, label: Option<String>, content: String) -> Res<i64> {
     if content.trim().is_empty() {
         return Err("Content is empty".into());
@@ -151,7 +157,7 @@ pub fn add_pin(app: AppHandle, label: Option<String>, content: String) -> Res<i6
     Ok(id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_pin(app: AppHandle, id: i64, label: Option<String>, content: Option<String>) -> Res<()> {
     pins::update(&state(&app).db(), id, label.as_deref(), content.as_deref()).map_err(err)?;
     emit(&app, "pins-changed");
@@ -159,17 +165,20 @@ pub fn update_pin(app: AppHandle, id: i64, label: Option<String>, content: Optio
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_pin(app: AppHandle, id: i64) -> Res<()> {
     let st = state(&app);
-    pins::delete(&st.db(), id).map_err(err)?;
-    history::remove_orphan_images(&st.db(), &st.images_dir).map_err(err)?;
+    let db = st.db();
+    let image = pins::get(&db, id).map_err(err)?.and_then(|p| p.image_path);
+    pins::delete(&db, id).map_err(err)?;
+    history::remove_images_if_unused(&db, &st.images_dir, &image.into_iter().collect::<Vec<_>>()).map_err(err)?;
+    drop(db);
     emit(&app, "pins-changed");
     emit(&app, "history-changed");
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reorder_pins(app: AppHandle, ids: Vec<i64>) -> Res<()> {
     pins::reorder(&mut state(&app).db(), &ids).map_err(err)?;
     emit(&app, "pins-changed");
@@ -332,14 +341,14 @@ pub async fn vault_change_password(app: AppHandle, old: String, new: String) -> 
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_list(app: AppHandle) -> Res<Vec<EntrySummary>> {
     let st = state(&app);
     st.with_key(|k| Ok(vault::list(&st.db(), k)?.iter().map(vault::summarize).collect()))
 }
 
 /// Full entry including secret values, for the editor.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_get(app: AppHandle, id: String) -> Res<Entry> {
     let st = state(&app);
     st.with_key(|k| vault::get(&st.db(), k, &id))
@@ -399,7 +408,7 @@ pub struct CopyResult {
 }
 
 /// Copies one field. Secret fields are concealed and auto-cleared; others are copied normally.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_copy_field(app: AppHandle, id: String, field_id: String, paste: bool) -> Res<CopyResult> {
     let (value, kind) = field_value(&app, &id, &field_id)?;
     let clear_seconds = if matches!(kind.as_str(), "secret" | "totp" | "note") {
@@ -415,7 +424,7 @@ pub fn vault_copy_field(app: AppHandle, id: String, field_id: String, paste: boo
     Ok(CopyResult { clear_seconds })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_reveal_field(app: AppHandle, id: String, field_id: String) -> Res<String> {
     Ok(field_value(&app, &id, &field_id)?.0)
 }
@@ -426,7 +435,7 @@ pub struct Totp {
     remaining: u64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_totp(app: AppHandle, id: String, field_id: String) -> Res<Totp> {
     let st = state(&app);
     st.with_key(|k| {
@@ -443,7 +452,7 @@ pub fn vault_paste_login(app: AppHandle, id: String, user_field: String, pass_fi
     actions::start_sequence(&app, &id, &user_field, &pass_field)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_export(app: AppHandle, path: String) -> Res<()> {
     let st = state(&app);
     let backup = vault::export(&st.db())?;
@@ -455,7 +464,11 @@ pub async fn vault_import(app: AppHandle, path: String, password: String) -> Res
     let st = state(&app);
     let raw = std::fs::read(&path).map_err(err)?;
     let backup: vault::Backup = serde_json::from_slice(&raw).map_err(|_| "This is not a Pastora vault backup")?;
-    let n = st.with_key(|k| vault::import(&st.db(), k, &backup, &password))?;
+    if st.vault_key.lock().unwrap().is_none() {
+        return Err("LOCKED".into());
+    }
+    let bkey = vault::open_backup(&backup, &password)?;
+    let n = st.with_key(|k| vault::import_with_key(&st.db(), k, &backup, &bkey))?;
     emit(&app, "vault-changed");
     Ok(n)
 }
@@ -486,6 +499,7 @@ pub fn get_settings(app: AppHandle) -> Settings {
 pub fn apply_settings(app: &AppHandle, mut new: Settings) -> Res<Settings> {
     let st = state(app);
     let old = st.settings();
+    new = new.sanitize();
     new.touch_id_enabled = old.touch_id_enabled; // only changed through vault_set_biometric
 
     if new.shortcuts != old.shortcuts {
@@ -622,7 +636,7 @@ struct ExportFile {
 }
 
 /// Exports settings and text/file pins (not history, not Secure Clips).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_data(app: AppHandle, path: String) -> Res<()> {
     let st = state(&app);
     let pins = pins::list(&st.db(), "")

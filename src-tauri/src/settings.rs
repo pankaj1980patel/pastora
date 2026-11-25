@@ -120,6 +120,17 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Pulls values that came from disk or an import file back into a usable range.
+    pub fn sanitize(mut self) -> Self {
+        self.popup_width = self.popup_width.clamp(320, 1200);
+        self.popup_height = self.popup_height.clamp(360, 1200);
+        self.font_size = self.font_size.clamp(10, 20);
+        if !["menubar", "cursor", "center"].contains(&self.popup_position.as_str()) {
+            self.popup_position = "menubar".into();
+        }
+        self
+    }
+
     pub fn is_paused(&self, now: i64) -> bool {
         matches!(self.paused_until, Some(t) if t > now)
     }
@@ -133,7 +144,7 @@ pub fn load(conn: &Connection) -> Settings {
         .optional()
         .ok()
         .flatten();
-    raw.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    raw.and_then(|s| serde_json::from_str::<Settings>(&s).ok()).unwrap_or_default().sanitize()
 }
 
 pub fn save(conn: &Connection, s: &Settings) -> rusqlite::Result<()> {

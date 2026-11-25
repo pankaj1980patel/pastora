@@ -349,15 +349,26 @@ pub fn export(conn: &Connection) -> Result<Backup, String> {
 }
 
 /// Decrypts a backup with its own password and adds its entries to the current (unlocked) vault.
-pub fn import(conn: &Connection, key: &Key, backup: &Backup, password: &str) -> Result<usize, String> {
+/// Unwraps a backup's key with its password. Slow (Argon2): call without holding locks.
+pub fn open_backup(backup: &Backup, password: &str) -> Result<Key, String> {
     let dec = |s: &str| B64.decode(s).map_err(|_| "Backup file is corrupt".to_string());
     let kek = crypto::derive_kek(password, &dec(&backup.salt)?, backup.m_cost, backup.t_cost, backup.p_cost)?;
     let raw = crypto::open(&kek, &dec(&backup.wrap_nonce)?, &dec(&backup.wrapped_key)?, b"vault-key")
         .map_err(|_| "Wrong password for this backup".to_string())?;
-    let bkey = crypto::key_from_slice(&raw)?;
+    crypto::key_from_slice(&raw)
+}
+
+#[cfg(test)]
+pub fn import(conn: &Connection, key: &Key, backup: &Backup, password: &str) -> Result<usize, String> {
+    import_with_key(conn, key, backup, &open_backup(backup, password)?)
+}
+
+/// Re-encrypts a backup's entries (unwrapped with `open_backup`) into this vault.
+pub fn import_with_key(conn: &Connection, key: &Key, backup: &Backup, bkey: &Key) -> Result<usize, String> {
+    let dec = |s: &str| B64.decode(s).map_err(|_| "Backup file is corrupt".to_string());
     let mut n = 0;
     for be in backup.entries.iter().rev() {
-        let mut e = decrypt_row(&bkey, &be.id, be.template.clone(), &dec(&be.nonce)?, &dec(&be.payload)?, be.favorite, be.updated_at)?;
+        let mut e = decrypt_row(bkey, &be.id, be.template.clone(), &dec(&be.nonce)?, &dec(&be.payload)?, be.favorite, be.updated_at)?;
         e.id = String::new(); // always import as a new entry
         save(conn, key, e)?;
         n += 1;

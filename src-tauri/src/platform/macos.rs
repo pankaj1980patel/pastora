@@ -6,14 +6,15 @@ use core_foundation::string::{CFString, CFStringRef};
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use objc2::rc::Retained;
-use objc2::AnyThread;
+use objc2::{AnyThread, MainThreadMarker};
 use objc2::runtime::{Bool, ProtocolObject};
 use objc2_app_kit::{
-    NSAnimatablePropertyContainer, NSAnimationContext, NSBitmapImageFileType, NSBitmapImageRep, NSImage, NSWindow,
+    NSAnimatablePropertyContainer, NSAnimationContext, NSBitmapImageFileType, NSBitmapImageRep, NSEvent, NSImage, NSScreen, NSWindow,
+    NSWindowCollectionBehavior,
     NSApplicationActivationOptions, NSApplicationActivationPolicy, NSPasteboard, NSPasteboardContentsOptions, NSRunningApplication, NSPasteboardItem, NSPasteboardTypeFileURL,
     NSPasteboardTypePNG, NSPasteboardTypeString, NSPasteboardTypeTIFF, NSPasteboardWriting, NSWorkspace,
 };
-use objc2_foundation::{NSArray, NSData, NSDictionary, NSError, NSString, NSURL};
+use objc2_foundation::{NSArray, NSData, NSDictionary, NSError, NSPoint, NSRect, NSSize, NSString, NSURL};
 use objc2_local_authentication::{LAContext, LAPolicy};
 use std::cell::Cell;
 use std::ffi::c_void;
@@ -283,16 +284,108 @@ pub fn activate_pid(pid: i32) -> bool {
     }
 }
 
-/// Fades a just-shown window in with a small downward slide. Main thread only.
-pub unsafe fn animate_in(ns_window: *mut c_void) {
+/// Where the popup opens.
+#[derive(Debug, Clone, Copy)]
+pub enum Anchor {
+    /// Below the menu bar icon. `phys_x`/`phys_w` are the icon's rect as Tauri reports it
+    /// (points times the backing scale of the icon's screen).
+    Tray { phys_x: f64, phys_w: f64 },
+    Center,
+    Cursor,
+}
+
+thread_local! {
+    /// The frame `place_popup` chose, for `animate_in` to slide to (main thread only).
+    static PENDING_END: Cell<Option<NSRect>> = const { Cell::new(None) };
+}
+
+/// Keeps `v` in `[lo, hi]`; if the range is empty (window bigger than the screen) uses `lo`.
+fn clamp_in(v: f64, lo: f64, hi: f64) -> f64 {
+    if hi < lo { lo } else { v.clamp(lo, hi) }
+}
+
+/// The screen under the mouse pointer (or the main screen).
+fn screen_under_mouse(mtm: MainThreadMarker) -> Option<(Retained<NSScreen>, NSPoint)> {
+    let mouse = NSEvent::mouseLocation();
+    let hit = NSScreen::screens(mtm).iter().find(|s| {
+        let f = s.frame();
+        mouse.x >= f.origin.x
+            && mouse.x <= f.origin.x + f.size.width
+            && mouse.y >= f.origin.y
+            && mouse.y <= f.origin.y + f.size.height
+    });
+    hit.or_else(|| NSScreen::mainScreen(mtm)).map(|s| (s, mouse))
+}
+
+/// Sizes and places the popup on the screen under the pointer, working in Cocoa points so
+/// displays with different scale factors line up. The frame is set synchronously (Tauri's
+/// setters are applied later, after the fade-in has already read the frame), and the window
+/// is left transparent at its slide-in start, ready for `animate_in`.
+/// Main thread only; call before the window is shown.
+pub unsafe fn place_popup(ns_window: *mut c_void, anchor: Anchor, width: f64, height: f64) {
     let Some(w) = Retained::retain(ns_window as *mut NSWindow) else { return };
-    let end = w.frame();
+    let mtm = MainThreadMarker::new_unchecked();
+    let Some((screen, mouse)) = screen_under_mouse(mtm) else { return };
+    let sf = screen.frame();
+    let mut vf = screen.visibleFrame();
+    if vf.size.width <= 0.0 || vf.size.height <= 0.0 {
+        vf = sf;
+    }
+    // Never larger than the usable area of this screen.
+    let ww = width.min(vf.size.width - 16.0).max(1.0);
+    let wh = height.min(vf.size.height - 16.0).max(1.0);
+    let (left, right) = (vf.origin.x, vf.origin.x + vf.size.width);
+    let (bottom, top) = (vf.origin.y, vf.origin.y + vf.size.height);
+    // (x, top edge) in Cocoa coordinates: y grows upwards.
+    let (x, y_top) = match anchor {
+        Anchor::Tray { phys_x, phys_w } => {
+            // The click came from the icon, so the pointer is on the icon's screen.
+            let scale = screen.backingScaleFactor().max(1.0);
+            let cx = (phys_x + phys_w / 2.0) / scale;
+            let cx = if cx >= sf.origin.x && cx <= sf.origin.x + sf.size.width { cx } else { mouse.x };
+            (cx - ww / 2.0, top - 4.0)
+        }
+        Anchor::Center => (left + (vf.size.width - ww) / 2.0, top - (vf.size.height - wh) / 3.0),
+        Anchor::Cursor => (mouse.x - 24.0, mouse.y - 12.0),
+    };
+    let x = clamp_in(x, left + 8.0, right - ww - 8.0);
+    let y = clamp_in(y_top - wh, bottom + 8.0, top - wh - 8.0);
+    let end = NSRect::new(NSPoint::new(x, y), NSSize::new(ww, wh));
     let mut start = end;
     if !NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion() {
         start.origin.y += 8.0;
     }
     w.setAlphaValue(0.0);
     w.setFrame_display(start, false);
+    PENDING_END.with(|c| c.set(Some(end)));
+}
+
+/// Lets the popup float over full-screen apps on any display. Main thread only.
+pub unsafe fn configure_popup(ns_window: *mut c_void) {
+    let Some(w) = Retained::retain(ns_window as *mut NSWindow) else { return };
+    w.setCollectionBehavior(
+        w.collectionBehavior()
+            | NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::FullScreenAuxiliary,
+    );
+}
+
+/// Centers a window on the screen under the pointer. Main thread only.
+pub unsafe fn center_on_mouse_screen(ns_window: *mut c_void) {
+    let Some(w) = Retained::retain(ns_window as *mut NSWindow) else { return };
+    let mtm = MainThreadMarker::new_unchecked();
+    let Some((screen, _)) = screen_under_mouse(mtm) else { return };
+    let vf = screen.visibleFrame();
+    let mut f = w.frame();
+    f.origin.x = vf.origin.x + (vf.size.width - f.size.width).max(0.0) / 2.0;
+    f.origin.y = vf.origin.y + (vf.size.height - f.size.height).max(0.0) / 2.0;
+    w.setFrame_display(f, true);
+}
+
+/// Fades a just-shown window in, sliding to the frame `place_popup` chose. Main thread only.
+pub unsafe fn animate_in(ns_window: *mut c_void) {
+    let Some(w) = Retained::retain(ns_window as *mut NSWindow) else { return };
+    let end = PENDING_END.with(|c| c.take()).unwrap_or_else(|| w.frame());
     let changes = block2::StackBlock::new(move |ctx: NonNull<NSAnimationContext>| {
         ctx.as_ref().setDuration(0.16);
         let a = w.animator();

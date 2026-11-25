@@ -14,6 +14,8 @@ export interface Clip {
   lastUsedAt: number;
   useCount: number;
   pinned: boolean;
+  /** `content` is only a preview; `getClip` returns all of it. */
+  truncated: boolean;
 }
 
 export interface Pin {
@@ -141,6 +143,7 @@ export interface AppInfo {
 export const api = {
   listHistory: (query: string, limit = 100, offset = 0) =>
     invoke<Clip[]>("list_history", { query, limit, offset }),
+  getClip: (id: number) => invoke<Clip>("get_clip", { id }),
   deleteClip: (id: number) => invoke<void>("delete_clip", { id }),
   clearHistory: () => invoke<void>("clear_history"),
   useItem: (source: "history" | "pin", id: number, paste: boolean, plain?: string) =>

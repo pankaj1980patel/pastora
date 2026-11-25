@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { forwardRef, ReactNode } from "react";
+import { forwardRef, ReactNode, useState } from "react";
 import { Kind } from "../lib/api";
 import { fileName, firstLine, relativeTime, absoluteTime } from "../lib/format";
 import { Icon } from "./Icon";
@@ -14,6 +14,8 @@ export interface RowData {
   label?: string | null;
   sourceApp?: string | null;
   time?: number;
+  /** `content` is only the start of a longer text. */
+  truncated?: boolean;
 }
 
 export function clipTitle(d: RowData): string {
@@ -41,13 +43,20 @@ export function imageFileName(d: RowData): string {
   return `Pastora Image ${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} at ${p(t.getHours())}.${p(t.getMinutes())}.${p(t.getSeconds())}.${ext}`;
 }
 
+/** The small preview stored next to an image (see `thumb_path` in history.rs). */
+const thumbPath = (imagePath: string) => imagePath.replace(/\.[^./\\]+$/, ".thumb.png");
+
 export function ClipThumb({ d, selected }: { d: RowData; selected?: boolean }) {
+  // Images stored before previews existed have none: fall back to the image itself.
+  const [noThumb, setNoThumb] = useState(false);
   if (d.kind === "image" && d.imagePath) {
     return (
       <img
-        src={convertFileSrc(d.imagePath)}
+        src={convertFileSrc(noThumb ? d.imagePath : thumbPath(d.imagePath))}
+        onError={() => setNoThumb(true)}
         className="h-6 w-6 shrink-0 rounded border border-black/10 object-cover dark:border-white/10"
         loading="lazy"
+        decoding="async"
       />
     );
   }
@@ -119,7 +128,7 @@ export function Preview({ d, onSave }: { d: RowData | null; onSave?: () => void 
     <div className="relative max-h-36 shrink-0 overflow-auto border-t border-black/5 px-3 py-2 dark:border-white/10">
       {d.kind === "image" && d.imagePath ? (
         <>
-          <img src={convertFileSrc(d.imagePath)} className="mx-auto max-h-32 rounded object-contain" />
+          <img src={convertFileSrc(d.imagePath)} className="mx-auto max-h-32 rounded object-contain" decoding="async" />
           {onSave && (
             <button
               type="button"
@@ -133,7 +142,7 @@ export function Preview({ d, onSave }: { d: RowData | null; onSave?: () => void 
         </>
       ) : (
         <pre className="whitespace-pre-wrap break-words font-mono text-[0.8rem] text-neutral-600 dark:text-neutral-300">
-          {d.content.length > 4000 ? d.content.slice(0, 4000) + "…" : d.content}
+          {d.content.length > 4000 ? d.content.slice(0, 4000) + "…" : d.content + (d.truncated ? "…" : "")}
         </pre>
       )}
     </div>

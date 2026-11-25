@@ -22,6 +22,8 @@ export function Popup({ settings }: { settings: Settings }) {
   const [query, setQuery] = useState("");
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [shownAt, setShownAt] = useState(Date.now());
+  // Assume visible until told otherwise: the first show can happen before this page loads.
+  const [visible, setVisible] = useState(true);
   const [pending, setPending] = useState<Clip | null>(null);
   const [vaultLocked, setVaultLocked] = useState(true);
   const modal = useRef(false);
@@ -30,10 +32,22 @@ export function Popup({ settings }: { settings: Settings }) {
   const paused = settings.pausedUntil != null && settings.pausedUntil > Date.now();
   const searchHidden = tab === "secure" && vaultLocked;
 
+  const toastTimers = useRef(new Set<number>());
+  useEffect(() => {
+    const timers = toastTimers.current;
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, []);
   const toast = (message: string, seconds?: number) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t.slice(-2), { id, message, seconds }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), seconds ? Math.min(seconds, 4) * 1000 : 1800);
+    const timer = window.setTimeout(
+      () => {
+        toastTimers.current.delete(timer);
+        setToasts((t) => t.filter((x) => x.id !== id));
+      },
+      seconds ? Math.min(seconds, 4) * 1000 : 1800,
+    );
+    toastTimers.current.add(timer);
   };
 
   useEvent<{ message: string }>("toast", (p) => toast(p.message));
@@ -41,11 +55,16 @@ export function Popup({ settings }: { settings: Settings }) {
   useEvent<{ tab: Tab | null }>("popup-shown", (p) => {
     if (p.tab) setTab(p.tab);
     setQuery("");
+    setPending(null);
     setShownAt(Date.now());
+    setVisible(true);
     requestAnimationFrame(() => search.current?.focus());
   });
+  // Hidden: drop Secure Clips state (revealed values, editors, typed passwords) and stop its timers.
+  useEvent("popup-hidden", () => setVisible(false));
 
   const switchTab = (t: Tab) => {
+    if (t !== "secure") setPending(null); // a "Move to Secure" that wasn't finished
     setTab(t);
     setQuery("");
     keys.current = null;
@@ -55,6 +74,13 @@ export function Popup({ settings }: { settings: Settings }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (modal.current) return; // editors handle their own keys
+      // Keys that confirm or navigate an IME composition (Chinese, Japanese, Korean…) belong to it.
+      if (e.isComposing || e.keyCode === 229) return;
+      // Holding Enter / ⌘⌫ must not paste or delete over and over.
+      if (e.repeat && (e.key === "Enter" || (isMod(e) && (e.key === "Backspace" || e.key === "Delete")))) {
+        e.preventDefault();
+        return;
+      }
       const input = document.activeElement as HTMLInputElement | null;
       if (e.key === "Escape") {
         e.preventDefault();
@@ -149,6 +175,7 @@ export function Popup({ settings }: { settings: Settings }) {
             query={query}
             settings={settings}
             active
+            visible={visible}
             onToast={toast}
             registerKeys={registerKeys}
             setModal={setModal}
@@ -162,8 +189,9 @@ export function Popup({ settings }: { settings: Settings }) {
         {tab === "pins" && (
           <PinList query={query} settings={settings} active onToast={toast} registerKeys={registerKeys} setModal={setModal} />
         )}
-        {tab === "secure" && (
+        {tab === "secure" && visible && (
           <SecurePanel
+            key={shownAt} // fresh state each time the popup opens
             query={query}
             active
             shownAt={shownAt}

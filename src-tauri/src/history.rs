@@ -3,7 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +19,8 @@ pub struct Clip {
     pub last_used_at: i64,
     pub use_count: i64,
     pub pinned: bool,
+    /// `content` was cut to 2000 characters by `list`; fetch the full clip with `get`.
+    pub truncated: bool,
 }
 
 pub struct NewClip {
@@ -39,9 +41,16 @@ pub fn hash(kind: &str, bytes: &[u8]) -> String {
     hex::encode(h.finalize())
 }
 
-const SELECT: &str = "SELECT c.id, c.kind, c.content, c.image_path, c.source_app, c.width, c.height,
+const SELECT_FULL: &str = "SELECT c.id, c.kind, c.content, c.image_path, c.source_app, c.width, c.height,
         c.created_at, c.last_used_at, c.use_count,
-        EXISTS(SELECT 1 FROM pins p WHERE p.kind = c.kind AND p.content = c.content)
+        EXISTS(SELECT 1 FROM pins p WHERE p.kind = c.kind AND p.content = c.content), 0
+    FROM clips c";
+
+/// Clips can be megabytes; the list only needs a preview (2000 characters).
+const SELECT_PREVIEW: &str = "SELECT c.id, c.kind, substr(c.content, 1, 2000), c.image_path, c.source_app, c.width, c.height,
+        c.created_at, c.last_used_at, c.use_count,
+        EXISTS(SELECT 1 FROM pins p WHERE p.kind = c.kind AND p.content = c.content),
+        length(c.content) > 2000
     FROM clips c";
 
 fn row(r: &Row) -> rusqlite::Result<Clip> {
@@ -57,6 +66,7 @@ fn row(r: &Row) -> rusqlite::Result<Clip> {
         last_used_at: r.get(8)?,
         use_count: r.get(9)?,
         pinned: r.get(10)?,
+        truncated: r.get(11)?,
     })
 }
 
@@ -76,7 +86,7 @@ pub fn insert(conn: &Connection, c: &NewClip) -> rusqlite::Result<()> {
 pub fn list(conn: &Connection, query: &str, limit: i64, offset: i64) -> rusqlite::Result<Vec<Clip>> {
     let like = format!("%{}%", escape_like(query));
     let mut stmt = conn.prepare(&format!(
-        "{SELECT} WHERE (?1 = '' OR c.content LIKE ?2 ESCAPE '\\' OR c.source_app LIKE ?2 ESCAPE '\\')
+        "{SELECT_PREVIEW} WHERE (?1 = '' OR c.content LIKE ?2 ESCAPE '\\' OR c.source_app LIKE ?2 ESCAPE '\\')
          ORDER BY c.last_used_at DESC LIMIT ?3 OFFSET ?4"
     ))?;
     let rows = stmt.query_map(params![query, like, limit, offset], row)?;
@@ -84,7 +94,7 @@ pub fn list(conn: &Connection, query: &str, limit: i64, offset: i64) -> rusqlite
 }
 
 pub fn get(conn: &Connection, id: i64) -> rusqlite::Result<Option<Clip>> {
-    conn.query_row(&format!("{SELECT} WHERE c.id = ?1"), [id], row).optional()
+    conn.query_row(&format!("{SELECT_FULL} WHERE c.id = ?1"), [id], row).optional()
 }
 
 pub fn touch(conn: &Connection, id: i64) -> rusqlite::Result<()> {
@@ -95,37 +105,85 @@ pub fn touch(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// Runs a `DELETE ... RETURNING image_path` and returns (rows removed, their image files).
+fn delete_returning(conn: &Connection, sql: &str, params: impl rusqlite::Params) -> rusqlite::Result<(usize, Vec<String>)> {
+    let mut stmt = conn.prepare(sql)?;
+    let mut rows = stmt.query(params)?;
+    let (mut n, mut images) = (0, vec![]);
+    while let Some(r) = rows.next()? {
+        n += 1;
+        if let Some(p) = r.get::<_, Option<String>>(0)? {
+            images.push(p);
+        }
+    }
+    Ok((n, images))
+}
+
+/// The small preview kept next to an image (`<hash>.thumb.png`), so lists don't decode full-size pictures.
+pub fn thumb_path(image: &Path) -> PathBuf {
+    image.with_extension("thumb.png")
+}
+
+/// Writes the preview for a newly stored image. Best effort: the UI falls back to the image.
+pub fn write_thumb(image: &Path, bytes: &[u8]) {
+    if let Ok(img) = image::load_from_memory(bytes) {
+        let _ = img.thumbnail(96, 96).save_with_format(thumb_path(image), image::ImageFormat::Png);
+    }
+}
+
+/// Deletes the given image files (and their previews) unless a clip or pin still uses them.
+pub fn remove_images_if_unused(conn: &Connection, images_dir: &Path, paths: &[String]) -> rusqlite::Result<()> {
+    for p in paths {
+        let used: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM clips WHERE image_path = ?1) OR EXISTS(SELECT 1 FROM pins WHERE image_path = ?1)",
+            [p],
+            |r| r.get(0),
+        )?;
+        // Only ever delete inside our own images folder.
+        if !used && Path::new(p).starts_with(images_dir) {
+            let _ = std::fs::remove_file(p);
+            let _ = std::fs::remove_file(thumb_path(Path::new(p)));
+        }
+    }
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, id: i64, images_dir: &Path) -> rusqlite::Result<()> {
-    conn.execute("DELETE FROM clips WHERE id = ?1", [id])?;
-    remove_orphan_images(conn, images_dir)
+    let (_, images) = delete_returning(conn, "DELETE FROM clips WHERE id = ?1 RETURNING image_path", [id])?;
+    remove_images_if_unused(conn, images_dir, &images)
 }
 
 pub fn clear(conn: &Connection, images_dir: &Path) -> rusqlite::Result<()> {
-    conn.execute("DELETE FROM clips", [])?;
-    remove_orphan_images(conn, images_dir)
+    let (_, images) = delete_returning(conn, "DELETE FROM clips RETURNING image_path", [])?;
+    remove_images_if_unused(conn, images_dir, &images)
 }
 
 /// Applies the history size and age limits.
 pub fn prune(conn: &Connection, limit: u32, days: u32, images_dir: &Path) -> rusqlite::Result<usize> {
     let mut removed = 0;
+    let mut images = vec![];
     if days > 0 {
         let cutoff = now_ms() - days as i64 * 86_400_000;
-        removed += conn.execute("DELETE FROM clips WHERE last_used_at < ?1", [cutoff])?;
+        let (n, imgs) = delete_returning(conn, "DELETE FROM clips WHERE last_used_at < ?1 RETURNING image_path", [cutoff])?;
+        removed += n;
+        images.extend(imgs);
     }
     if limit > 0 {
-        removed += conn.execute(
+        let (n, imgs) = delete_returning(
+            conn,
             "DELETE FROM clips WHERE id NOT IN
-               (SELECT id FROM clips ORDER BY last_used_at DESC LIMIT ?1)",
+               (SELECT id FROM clips ORDER BY last_used_at DESC LIMIT ?1) RETURNING image_path",
             [limit],
         )?;
+        removed += n;
+        images.extend(imgs);
     }
-    if removed > 0 {
-        remove_orphan_images(conn, images_dir)?;
-    }
+    // Only the files of the removed rows: no scan of the whole folder on every copy.
+    remove_images_if_unused(conn, images_dir, &images)?;
     Ok(removed)
 }
 
-/// Deletes image files no longer referenced by any clip or pin.
+/// Deletes image files no longer referenced by any clip or pin (full folder scan; run at startup).
 pub fn remove_orphan_images(conn: &Connection, images_dir: &Path) -> rusqlite::Result<()> {
     let mut used = HashSet::new();
     for sql in [
@@ -134,7 +192,9 @@ pub fn remove_orphan_images(conn: &Connection, images_dir: &Path) -> rusqlite::R
     ] {
         let mut stmt = conn.prepare(sql)?;
         for p in stmt.query_map([], |r| r.get::<_, String>(0))? {
-            used.insert(p?);
+            let p = p?;
+            used.insert(thumb_path(Path::new(&p)).to_string_lossy().to_string());
+            used.insert(p);
         }
     }
     if let Ok(entries) = std::fs::read_dir(images_dir) {
@@ -168,6 +228,14 @@ mod tests {
         })
         .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+
+    #[test]
+    fn pinned_check_uses_index() {
+        let conn = crate::db::memory();
+        let mut stmt = conn.prepare(&format!("EXPLAIN QUERY PLAN {SELECT_PREVIEW} LIMIT 1")).unwrap();
+        let plan: Vec<String> = stmt.query_map([], |r| r.get::<_, String>(3)).unwrap().map(|r| r.unwrap()).collect();
+        assert!(plan.iter().any(|p| p.contains("pins_kind_content")), "{plan:?}");
     }
 
     #[test]

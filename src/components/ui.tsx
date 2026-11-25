@@ -88,14 +88,15 @@ export function Kbd({ children }: { children: ReactNode }) {
 export const inputClass =
   "w-full rounded-md border border-black/10 bg-white/70 px-2.5 py-1.5 text-[0.95rem] outline-none placeholder:text-neutral-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30 dark:border-white/10 dark:bg-black/30";
 
-/** Small ring that empties over `seconds`. */
-export function Countdown({ seconds, size = 16 }: { seconds: number; size?: number }) {
-  const [left, setLeft] = useState(seconds);
+/** Small ring that empties over `seconds`, starting from `initial` seconds left (default: full). */
+export function Countdown({ seconds, initial, size = 16 }: { seconds: number; initial?: number; size?: number }) {
+  const from = Math.min(initial ?? seconds, seconds);
+  const [left, setLeft] = useState(from);
   useEffect(() => {
     const start = Date.now();
-    const t = setInterval(() => setLeft(Math.max(0, seconds - (Date.now() - start) / 1000)), 100);
+    const t = setInterval(() => setLeft(Math.max(0, from - (Date.now() - start) / 1000)), 100);
     return () => clearInterval(t);
-  }, [seconds]);
+  }, [seconds, from]);
   const r = size / 2 - 2;
   const c = 2 * Math.PI * r;
   return (

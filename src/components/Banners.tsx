@@ -40,12 +40,8 @@ function AccessBanner({ settings }: { settings: Settings }) {
   const check = () => {
     if (relevant) api.accessibilityStatus().then(setTrusted);
   };
-  useEffect(() => {
-    check();
-    if (!relevant) return;
-    const t = setInterval(check, 2000);
-    return () => clearInterval(t);
-  }, [relevant]);
+  // The backend watches the permission and sends "accessibility-changed"; no polling here.
+  useEffect(check, [relevant]);
   useEvent("popup-shown", check);
   useEvent<boolean>("accessibility-changed", setTrusted);
   if (!relevant || trusted || hidden) return null;

@@ -37,6 +37,8 @@ pub fn run() {
             let conn = db::open(&data_dir.join("clipboard.db"))?;
             let settings = settings::load(&conn);
             let _ = history::prune(&conn, settings.history_limit, settings.history_days, &data_dir.join("images"));
+            // Sweep files left behind by a crash (the watcher isn't running yet).
+            let _ = history::remove_orphan_images(&conn, &data_dir.join("images"));
             app.manage(AppState::new(conn, settings.clone(), data_dir));
 
             window::apply_window_settings(&handle);
@@ -65,6 +67,7 @@ pub fn run() {
         .on_window_event(window::on_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::list_history,
+            commands::get_clip,
             commands::delete_clip,
             commands::clear_history,
             commands::use_item,
