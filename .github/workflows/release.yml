@@ -55,7 +55,9 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
       - run: npm ci
       # Update packages are only made here, where the signing key is: building from source needs no key.
+      # bash on every OS: PowerShell would strip the quotes from the JSON.
       - run: npm run tauri build -- ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+        shell: bash
         env:
           # Signs the update packages; the app only installs updates signed with this key.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
