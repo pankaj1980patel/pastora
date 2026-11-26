@@ -18,6 +18,22 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 const RELEASES: &str = "https://github.com/pankaj1980patel/pastora/releases";
 const DISMISSED: &str = "updates.dismissed";
 const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+/// After a failed check (offline, GitHub unreachable), try again sooner than a day.
+const RETRY: Duration = Duration::from_secs(60 * 60);
+/// The whole update check (not the download, which can legitimately take longer).
+const CHECK_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// The updater with timeouts. Without them a dead connection waits forever: GitHub's file
+/// CDN resolves to several addresses, and when one is unreachable from the user's network
+/// "Checking…" never finished. The connect timeout is split across the addresses, so a dead
+/// one is skipped after a few seconds; the read timeout ends a stalled download.
+fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    app.updater_builder()
+        .configure_client(|c| c.connect_timeout(Duration::from_secs(20)).read_timeout(Duration::from_secs(30)))
+        .timeout(CHECK_TIMEOUT)
+        .build()
+        .map_err(|e| e.to_string())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,8 +137,8 @@ fn set_stage(app: &AppHandle, stage: Stage, error: Option<String>) {
 /// Asks for the latest release. Returns it if it's newer than this build, and starts the
 /// background download when "Download updates automatically" is on.
 pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
-    let found = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
-    let Some(update) = found else {
+    let found = updater(app)?.check().await.map_err(|e| e.to_string())?;
+    let Some(mut update) = found else {
         if !BUSY.load(Ordering::SeqCst) {
             *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = None;
             *state(app).update.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -130,6 +146,9 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
         }
         return Ok(None);
     };
+    // The check's overall timeout would cut a slow download short; stalls are still caught
+    // by the read timeout.
+    update.timeout = None;
     let version = update.version.clone();
     let known = state(app).update.lock().unwrap_or_else(|e| e.into_inner()).clone().filter(|u| u.version == version);
     let info = match known {
@@ -280,13 +299,15 @@ pub fn spawn(app: AppHandle) {
             clear_cache(&app);
             std::thread::sleep(Duration::from_secs(10));
             loop {
+                let mut wait = DAY;
                 if state(&app).settings().check_updates {
                     // A plain thread, not a runtime worker, so blocking on the check is fine.
                     if let Err(e) = tauri::async_runtime::block_on(check(&app)) {
                         log::warn!("update check failed: {e}");
+                        wait = RETRY;
                     }
                 }
-                std::thread::sleep(DAY);
+                std::thread::sleep(wait);
             }
         })
         .expect("spawn update checker");
