@@ -67,6 +67,7 @@ Pastora runs in your Mac's menu bar and remembers everything you copy. Press **�
 - Pause recording for 15 minutes, 1 hour, or until you resume.
 - Themes (system, light, dark), popup size, text size, preview pane, and where the popup opens.
 - Start at login, menu-bar-only or Dock icon, and export/import of settings and pins.
+- **Automatic updates:** new versions download in the background, and Pastora restarts only when you click **Restart to update**.
 
 ## Security
 
@@ -76,7 +77,8 @@ Pastora runs in your Mac's menu bar and remembers everything you copy. Press **�
 | Master password | Argon2id (64 MiB, 3 passes) derives the key that wraps the vault key. |
 | Touch ID | After biometric verification the vault key is read from the macOS Keychain. Your master password is still requested periodically. |
 | Memory | The decrypted key stays in Rust memory and is zeroized when the vault locks. The UI only receives secret values when you copy or reveal one. |
-| Network | One request a day to GitHub to check for a new version (turn it off in Settings → General). Your clipboard is never sent anywhere, and there is no telemetry. |
+| Updates | Update packages are signed, and Pastora checks the signature against the public key built into the app before installing. An update that isn't signed by this project is rejected. |
+| Network | One request a day to GitHub to check for a new version, and the update download when there is one (turn either off in Settings → General). Your clipboard is never sent anywhere, and there is no telemetry. |
 
 Your data is stored in a SQLite database at `~/Library/Application Support/com.pastora.app/`, and it is kept across restarts.
 
@@ -97,6 +99,14 @@ Download from the same release:
 - **Linux:** `Pastora_<version>_Linux_x86_64.AppImage` (`chmod +x` it and run) or the `.deb`.
 
 These builds have clipboard history, pins, image clips, paste with **Ctrl+V** and Secure Clips with your master password. Not there yet: Windows Hello / fingerprint unlock, the "Ignored apps" picker, and global shortcuts on Wayland (X11 works). Open the popup with **Ctrl+Shift+V**.
+
+### Updating
+
+From 0.1.3 on, Pastora updates itself. When a new version is out it downloads in the background, and the popup, the menu bar menu and **Settings → About** show **Restart to update**. Nothing restarts until you click it.
+
+- To choose when to download, turn off **Settings → General → Download updates automatically**: the banner then shows an **Update** button instead.
+- To stop checking altogether, turn off **Check for updates** in the same place.
+- If an update can't be installed in place, Pastora links to the download instead. Older versions update by installing the new release over them.
 
 ## Build from source
 
