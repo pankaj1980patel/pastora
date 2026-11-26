@@ -78,6 +78,7 @@ Pastora runs in your Mac's menu bar and remembers everything you copy. Press **â
 | Touch ID | After biometric verification the vault key is read from the macOS Keychain. Your master password is still requested periodically. |
 | Memory | The decrypted key stays in Rust memory and is zeroized when the vault locks. The UI only receives secret values when you copy or reveal one. |
 | Updates | Update packages are signed, and Pastora checks the signature against the public key built into the app before installing. An update that isn't signed by this project is rejected. |
+| App signature (macOS) | Every release is signed with the same Pastora certificate, so macOS keeps your Accessibility permission and Touch ID unlock across updates. The release build fails if the signing identity ever changes. |
 | Network | One request a day to GitHub to check for a new version, and the update download when there is one (turn either off in Settings â†’ General). Your clipboard is never sent anywhere, and there is no telemetry. |
 
 Your data is stored in a SQLite database at `~/Library/Application Support/com.pastora.app/`, and it is kept across restarts.
@@ -156,7 +157,8 @@ cd src-tauri && cargo test # run the Rust unit tests
 - [ ] Linux: Wayland shortcuts, Secret Service, fprintd fingerprint
 - [ ] Windows: Windows Hello, Credential Manager, ignored-apps picker
 - [x] Auto-update: signed updates download in the background, installed on "Restart to update"
-- [ ] Signed and notarized macOS releases
+- [x] Same signing certificate for every macOS release, so permissions survive updates
+- [ ] Notarized macOS releases (needs an Apple Developer ID; removes the "Open Anyway" step)
 
 ## Tech stack
 
