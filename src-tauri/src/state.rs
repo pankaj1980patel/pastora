@@ -79,12 +79,12 @@ impl AppState {
     }
 
     pub fn touch_vault(&self) {
-        *self.vault_activity.lock().unwrap() = Instant::now();
+        *self.vault_activity.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
     }
 
     /// Runs `f` with the vault key, or fails if the vault is locked.
     pub fn with_key<T>(&self, f: impl FnOnce(&Key) -> Result<T, String>) -> Result<T, String> {
-        let guard = self.vault_key.lock().unwrap();
+        let guard = self.vault_key.lock().unwrap_or_else(|e| e.into_inner());
         let key = guard.as_ref().ok_or_else(|| "LOCKED".to_string())?;
         self.touch_vault();
         f(key)

@@ -58,13 +58,15 @@ fn capture(st: &AppState) -> Result<bool, String> {
     // Image bytes still to be written. They are written under the database lock, together
     // with the insert, so a concurrent delete/clear can't remove the file in between.
     let mut image_bytes: Option<Vec<u8>> = None;
+    let mut thumb: Option<Vec<u8>> = None;
     let image_file = match snap.files.as_slice() {
         [f] if s.store_images && is_image_file(f) => capture_image_file(st, f, s.max_image_mb),
         _ => None,
     };
-    let clip = if let Some((mut c, bytes)) = image_file {
+    let clip = if let Some(img) = image_file {
+        let mut c = img.clip;
         c.source_app = source_app;
-        image_bytes = bytes;
+        image_bytes = img.bytes;
         c
     } else if !snap.files.is_empty() {
         let content = snap.files.join("\n");
@@ -92,9 +94,11 @@ fn capture(st: &AppState) -> Result<bool, String> {
         }
     } else if snap.has_image && s.store_images {
         match capture_image(st, s.max_image_mb)? {
-            Some((mut c, bytes)) => {
+            Some(img) => {
+                let mut c = img.clip;
                 c.source_app = source_app;
-                image_bytes = bytes;
+                image_bytes = img.bytes;
+                thumb = img.thumb;
                 c
             }
             None => return Ok(false),
@@ -118,9 +122,14 @@ fn capture(st: &AppState) -> Result<bool, String> {
     history::insert(&db, &clip).map_err(|e| e.to_string())?;
     history::prune(&db, s.history_limit, s.history_days, &st.images_dir).map_err(|e| e.to_string())?;
     drop(db);
-    // Decoding for the preview is slow: do it without holding the database.
+    // Making the preview is slow: do it without holding the database.
     if let Some((path, bytes)) = written {
-        history::write_thumb(&path, &bytes);
+        match thumb {
+            Some(png) => {
+                let _ = std::fs::write(history::thumb_path(&path), png);
+            }
+            None => history::write_thumb(&path, &bytes),
+        }
     }
     Ok(true)
 }
@@ -150,8 +159,13 @@ pub fn matches_ignore_pattern(patterns: &[String], text: &str) -> bool {
     cache.as_ref().is_some_and(|(_, res)| res.iter().any(|re| re.is_match(text)))
 }
 
-/// An image clip and the bytes still to be stored (None when the file already exists).
-type ImageClip = (NewClip, Option<Vec<u8>>);
+/// An image clip, the bytes still to be stored (None when the file already exists) and,
+/// when already made from pixels in memory, its preview PNG.
+struct ImageClip {
+    clip: NewClip,
+    bytes: Option<Vec<u8>>,
+    thumb: Option<Vec<u8>>,
+}
 
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "heic", "heif", "tiff", "tif", "webp", "bmp"];
 
@@ -180,8 +194,8 @@ fn capture_image_file(st: &AppState, src: &str, max_mb: u32) -> Option<ImageClip
     // Read the size from the original: the copy isn't written yet.
     let size = platform::image_size(src);
     let name = std::path::Path::new(src).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    Some((
-        NewClip {
+    Some(ImageClip {
+        clip: NewClip {
             kind: "image",
             content: name,
             image_path: Some(path),
@@ -190,8 +204,9 @@ fn capture_image_file(st: &AppState, src: &str, max_mb: u32) -> Option<ImageClip
             width: size.map(|s| s.0),
             height: size.map(|s| s.1),
         },
-        Some(bytes),
-    ))
+        bytes: Some(bytes),
+        thumb: None,
+    })
 }
 
 fn capture_image(st: &AppState, max_mb: u32) -> Result<Option<ImageClip>, String> {
@@ -202,24 +217,30 @@ fn capture_image(st: &AppState, max_mb: u32) -> Result<Option<ImageClip>, String
     let hash = history::hash("image", &img.bytes);
     let name = format!("{hash}.png");
     let path = st.images_dir.join(&name);
-    let mut bytes = None;
+    let (mut bytes, mut thumb) = (None, None);
     if !path.exists() {
         let limit = if max_mb > 0 { max_mb as usize * 1024 * 1024 } else { usize::MAX };
-        match encode_png_capped(&img.bytes, img.width as u32, img.height as u32, limit) {
+        let (w, h) = (img.width as u32, img.height as u32);
+        match encode_png_capped(&img.bytes, w, h, limit) {
             Ok(Some(png)) => bytes = Some(png),
             Ok(None) => return Ok(None), // over the size limit
             Err(e) => return Err(e),
         }
+        thumb = history::thumb_from_rgba(&img.bytes, w, h);
     }
-    Ok(Some((NewClip {
-        kind: "image",
-        content: name,
-        image_path: Some(path.to_string_lossy().to_string()),
-        hash,
-        source_app: None,
-        width: Some(img.width as i64),
-        height: Some(img.height as i64),
-    }, bytes)))
+    Ok(Some(ImageClip {
+        clip: NewClip {
+            kind: "image",
+            content: name,
+            image_path: Some(path.to_string_lossy().to_string()),
+            hash,
+            source_app: None,
+            width: Some(img.width as i64),
+            height: Some(img.height as i64),
+        },
+        bytes,
+        thumb,
+    }))
 }
 
 /// A `Vec` writer that fails once more than `limit` bytes are written.

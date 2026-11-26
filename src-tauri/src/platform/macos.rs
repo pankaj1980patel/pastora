@@ -235,8 +235,11 @@ pub fn biometric_name() -> &'static str {
     "Touch ID"
 }
 
+/// A Touch ID check that succeeded. Passed to the keychain so it doesn't prompt again.
+pub type AuthContext = Retained<LAContext>;
+
 /// Shows the Touch ID prompt and blocks until the user responds. Call off the main thread.
-pub fn biometric_auth(reason: &str) -> Result<(), String> {
+pub fn biometric_auth(reason: &str) -> Result<AuthContext, String> {
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     let ctx = unsafe { LAContext::new() };
     unsafe { ctx.setLocalizedFallbackTitle(Some(&NSString::from_str(""))) };
@@ -265,7 +268,8 @@ pub fn biometric_auth(reason: &str) -> Result<(), String> {
             &block,
         )
     };
-    rx.recv_timeout(Duration::from_secs(60)).map_err(|_| "Timed out".to_string())?
+    rx.recv_timeout(Duration::from_secs(60)).map_err(|_| "Timed out".to_string())??;
+    Ok(ctx)
 }
 
 pub fn open_path(path: &std::path::Path) {

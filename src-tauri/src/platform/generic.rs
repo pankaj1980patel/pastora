@@ -23,16 +23,81 @@ pub fn change_count() -> i64 {
     unsafe { windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber() as i64 }
 }
 
+/// Windows counts every change itself; nothing to remember before a write.
 #[cfg(windows)]
-fn written() -> i64 {
+fn before_write() -> i64 {
+    0
+}
+
+#[cfg(windows)]
+fn written(_before: i64) -> i64 {
     change_count()
 }
 
-/// Linux has no clipboard sequence number: bump a counter whenever the content changes.
+/// X11 has no clipboard sequence number. Preferred: count XFixes "selection owner changed"
+/// events (every copy makes a new owner), so polling is a single atomic load. Fallback, if
+/// XFixes isn't available: fingerprint the content on every poll, which reads (and for
+/// images decodes) the whole clipboard each time.
 #[cfg(not(windows))]
 mod counter {
     use std::hash::{DefaultHasher, Hash, Hasher};
-    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+
+    /// Owner changes seen by the event thread.
+    static EVENTS: AtomicI64 = AtomicI64::new(0);
+    /// Cleared if the event thread loses its X connection.
+    static EVENTS_OK: AtomicBool = AtomicBool::new(false);
+    static STARTED: OnceLock<()> = OnceLock::new();
+
+    #[cfg(target_os = "linux")]
+    fn start_events() -> Result<(), Box<dyn std::error::Error>> {
+        use x11rb::connection::Connection;
+        use x11rb::protocol::xfixes::{ConnectionExt as _, SelectionEventMask};
+        use x11rb::protocol::xproto::{ConnectionExt as _, CreateWindowAux, WindowClass};
+        use x11rb::protocol::Event;
+
+        let (conn, screen) = x11rb::connect(None)?;
+        conn.xfixes_query_version(5, 0)?.reply()?;
+        let root = conn.setup().roots[screen].root;
+        let win = conn.generate_id()?;
+        conn.create_window(0, win, root, 0, 0, 1, 1, 0, WindowClass::INPUT_ONLY, 0, &CreateWindowAux::new())?;
+        let clipboard = conn.intern_atom(false, b"CLIPBOARD")?.reply()?.atom;
+        let mask = SelectionEventMask::SET_SELECTION_OWNER
+            | SelectionEventMask::SELECTION_WINDOW_DESTROY
+            | SelectionEventMask::SELECTION_CLIENT_CLOSE;
+        conn.xfixes_select_selection_input(win, clipboard, mask)?.check()?;
+        EVENTS_OK.store(true, Ordering::SeqCst);
+        std::thread::Builder::new().name("x11-clipboard-events".into()).spawn(move || loop {
+            match conn.wait_for_event() {
+                Ok(Event::XfixesSelectionNotify(_)) => {
+                    EVENTS.fetch_add(1, Ordering::SeqCst);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    log::warn!("clipboard events stopped ({e}); falling back to polling");
+                    EVENTS_OK.store(false, Ordering::SeqCst);
+                    break;
+                }
+            }
+        })?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn start_events() -> Result<(), Box<dyn std::error::Error>> {
+        Err("not supported".into())
+    }
+
+    fn events() -> bool {
+        STARTED.get_or_init(|| {
+            if let Err(e) = start_events() {
+                log::warn!("XFixes clipboard events unavailable ({e}); polling clipboard content");
+            }
+        });
+        EVENTS_OK.load(Ordering::SeqCst)
+    }
 
     static STATE: Mutex<(i64, u64)> = Mutex::new((0, 0));
 
@@ -48,20 +113,41 @@ mod counter {
         h.finish()
     }
 
+    /// Event counts and fingerprint counts are kept apart (fingerprint values are
+    /// negative), so switching to the fallback mid-run is still seen as a change.
     pub fn current() -> i64 {
+        if events() {
+            return EVENTS.load(Ordering::SeqCst);
+        }
         let fp = fingerprint();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         if fp != s.1 {
-            *s = (s.0 + 1, fp);
+            *s = (s.0 - 1, fp);
         }
         s.0
     }
 
-    /// After our own write: record the new content so the watcher sees it as ours.
-    pub fn written() -> i64 {
+    pub fn before_write() -> i64 {
+        if events() {
+            EVENTS.load(Ordering::SeqCst)
+        } else {
+            0
+        }
+    }
+
+    /// After our own write: the count the watcher will see for it, so it's skipped as ours.
+    pub fn written(before: i64) -> i64 {
+        if events() {
+            // Our new ownership arrives as an event shortly after the write returns.
+            let start = Instant::now();
+            while EVENTS.load(Ordering::SeqCst) == before && start.elapsed() < Duration::from_millis(250) {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            return EVENTS.load(Ordering::SeqCst);
+        }
         let fp = fingerprint();
-        let mut s = STATE.lock().unwrap();
-        *s = (s.0 + 1, fp);
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        *s = (s.0 - 1, fp);
         s.0
     }
 }
@@ -72,8 +158,20 @@ pub fn change_count() -> i64 {
 }
 
 #[cfg(not(windows))]
-fn written() -> i64 {
-    counter::written()
+fn before_write() -> i64 {
+    counter::before_write()
+}
+
+#[cfg(not(windows))]
+fn written(before: i64) -> i64 {
+    counter::written(before)
+}
+
+/// Runs a clipboard write and returns the change count it produced.
+fn write_with(f: impl FnOnce(&mut Clipboard)) -> i64 {
+    let before = before_write();
+    with_clip(f);
+    written(before)
 }
 
 // ---------- Read / write ----------
@@ -114,7 +212,7 @@ pub fn read_snapshot() -> Snapshot {
 }
 
 pub fn write_text(text: &str, concealed: bool) -> i64 {
-    with_clip(|c| {
+    write_with(|c| {
         let set = c.set();
         #[cfg(windows)]
         let set = {
@@ -127,20 +225,21 @@ pub fn write_text(text: &str, concealed: bool) -> i64 {
         };
         #[cfg(not(windows))]
         let _ = concealed;
-        set.text(text)
-    });
-    written()
+        let _ = set.text(text);
+    })
 }
 
 pub fn write_files(paths: &[String]) -> i64 {
-    with_clip(|c| c.set().file_list(paths));
-    written()
+    write_with(|c| {
+        let _ = c.set().file_list(paths);
+    })
 }
 
 fn write_rgba(img: image::RgbaImage) -> i64 {
     let (w, h) = img.dimensions();
-    with_clip(|c| c.set_image(ImageData { width: w as usize, height: h as usize, bytes: Cow::Owned(img.into_raw()) }));
-    written()
+    write_with(|c| {
+        let _ = c.set_image(ImageData { width: w as usize, height: h as usize, bytes: Cow::Owned(img.into_raw()) });
+    })
 }
 
 pub fn write_png(png_bytes: &[u8]) -> i64 {
@@ -159,8 +258,9 @@ pub fn image_size(path: &str) -> Option<(i64, i64)> {
 }
 
 pub fn clear_clipboard() -> i64 {
-    with_clip(|c| c.clear());
-    written()
+    write_with(|c| {
+        let _ = c.clear();
+    })
 }
 
 // ---------- Focus and paste ----------
@@ -187,12 +287,12 @@ mod focus {
 
     pub fn frontmost_pid() -> Option<i32> {
         let (pid, hwnd) = foreground()?;
-        *LAST.lock().unwrap() = (pid, hwnd as usize);
+        *LAST.lock().unwrap_or_else(|e| e.into_inner()) = (pid, hwnd as usize);
         Some(pid as i32)
     }
 
     pub fn activate_pid(pid: i32) -> bool {
-        let (last_pid, hwnd) = *LAST.lock().unwrap();
+        let (last_pid, hwnd) = *LAST.lock().unwrap_or_else(|e| e.into_inner());
         last_pid == pid as u32 && hwnd != 0 && unsafe { SetForegroundWindow(hwnd as HWND) } != 0
     }
 
@@ -274,7 +374,10 @@ pub fn biometric_name() -> &'static str {
     }
 }
 
-pub fn biometric_auth(_reason: &str) -> Result<(), String> {
+/// No biometrics here: nothing to carry from the check to the keychain.
+pub type AuthContext = ();
+
+pub fn biometric_auth(_reason: &str) -> Result<AuthContext, String> {
     Err("Not supported on this platform yet".into())
 }
 

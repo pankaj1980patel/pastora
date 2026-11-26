@@ -220,7 +220,7 @@ pub fn vault_status(app: AppHandle) -> VaultStatus {
     let st = state(&app);
     let s = st.settings();
     let initialized = vault::is_initialized(&st.db());
-    let unlocked = st.vault_key.lock().unwrap().is_some();
+    let unlocked = st.vault_key.lock().unwrap_or_else(|e| e.into_inner()).is_some();
     VaultStatus {
         initialized,
         unlocked,
@@ -234,8 +234,13 @@ pub fn vault_status(app: AppHandle) -> VaultStatus {
 #[tauri::command]
 pub async fn vault_setup(app: AppHandle, password: String) -> Res<()> {
     let st = state(&app);
-    let key = vault::setup(&st.db(), &password)?;
-    *st.vault_key.lock().unwrap() = Some(key);
+    if vault::is_initialized(&st.db()) {
+        return Err("Secure Clips is already set up".into());
+    }
+    // Argon2 runs without the database lock, so capture and lists aren't blocked meanwhile.
+    let (key, meta) = vault::new_vault(&password)?;
+    vault::insert_meta(&st.db(), &meta)?;
+    *st.vault_key.lock().unwrap_or_else(|e| e.into_inner()) = Some(key);
     st.touch_vault();
     mark_password_unlock(&app);
     emit(&app, "vault-changed");
@@ -245,8 +250,9 @@ pub async fn vault_setup(app: AppHandle, password: String) -> Res<()> {
 #[tauri::command]
 pub async fn vault_unlock(app: AppHandle, password: String) -> Res<()> {
     let st = state(&app);
-    let key = vault::unlock(&st.db(), &password)?;
-    *st.vault_key.lock().unwrap() = Some(key);
+    let meta = vault::load_meta(&st.db())?;
+    let key = vault::unwrap_key(&meta, &password)?;
+    *st.vault_key.lock().unwrap_or_else(|e| e.into_inner()) = Some(key);
     st.touch_vault();
     mark_password_unlock(&app);
     emit(&app, "vault-changed");
@@ -276,7 +282,7 @@ fn with_popup_modal<T>(app: &AppHandle, f: impl FnOnce() -> T) -> T {
 /// A Touch ID prompt is showing. A second one would cancel the first.
 static BIO_BUSY: AtomicBool = AtomicBool::new(false);
 
-fn biometric_prompt(app: &AppHandle, reason: &str) -> Res<()> {
+fn biometric_prompt(app: &AppHandle, reason: &str) -> Res<platform::AuthContext> {
     if BIO_BUSY.swap(true, Ordering::SeqCst) {
         return Err("cancelled".into());
     }
@@ -294,11 +300,12 @@ pub async fn vault_unlock_biometric(app: AppHandle) -> Res<()> {
     if password_due(&app) {
         return Err("Enter your password (required periodically)".into());
     }
-    biometric_prompt(&app, "unlock Secure Clips")?;
-    let key = keychain::load().map_err(|e| format!("Could not read the key from Keychain: {e}"))?;
+    let ctx = biometric_prompt(&app, "unlock Secure Clips")?;
+    let key = keychain::load(&ctx)?;
+    drop(ctx);
     // Make sure the stored key really is this vault's key.
     vault::list(&st.db(), &key).map_err(|_| "Stored key does not match. Unlock with your password.")?;
-    *st.vault_key.lock().unwrap() = Some(key);
+    *st.vault_key.lock().unwrap_or_else(|e| e.into_inner()) = Some(key);
     st.touch_vault();
     emit(&app, "vault-changed");
     Ok(())
@@ -318,7 +325,8 @@ pub async fn vault_set_biometric(app: AppHandle, enabled: bool) -> Res<()> {
         }
         let key = st.with_key(|k| Ok(k.clone()))?;
         biometric_prompt(&app, "turn on Touch ID for Secure Clips")?;
-        keychain::store(&key)?;
+        let enforced_by_os = keychain::store(&key)?;
+        log::info!("Touch ID key stored ({})", if enforced_by_os { "biometry-bound" } else { "app-gated" });
     } else {
         keychain::delete();
     }
@@ -333,8 +341,12 @@ pub async fn vault_set_biometric(app: AppHandle, enabled: bool) -> Res<()> {
 #[tauri::command]
 pub async fn vault_change_password(app: AppHandle, old: String, new: String) -> Res<()> {
     let st = state(&app);
-    let key = vault::change_password(&st.db(), &old, &new)?;
-    *st.vault_key.lock().unwrap() = Some(key);
+    vault::validate_password(&new)?;
+    let meta = vault::load_meta(&st.db())?;
+    let key = vault::unwrap_key(&meta, &old).map_err(|_| "Current password is wrong".to_string())?;
+    let next = vault::wrap_key(&new, &key)?;
+    vault::replace_meta(&st.db(), &meta, &next)?;
+    *st.vault_key.lock().unwrap_or_else(|e| e.into_inner()) = Some(key);
     st.touch_vault();
     mark_password_unlock(&app);
     toast(&app, "Master password changed");
@@ -392,8 +404,8 @@ fn field_value(app: &AppHandle, id: &str, field_id: &str) -> Res<(String, String
         let e = vault::get(&st.db(), k, id)?;
         let f = e.payload.fields.iter().find(|f| f.id == field_id).ok_or("Field not found")?;
         let value = if f.kind == "totp" {
-            let secret = vault::totp::parse_secret(&f.value).ok_or("Invalid one-time code secret")?;
-            vault::totp::code(&secret, (now_ms() / 1000) as u64).0
+            let totp = vault::totp::parse(&f.value).ok_or("Invalid or unsupported one-time code secret")?;
+            vault::totp::code(&totp, (now_ms() / 1000) as u64).0
         } else {
             f.value.clone()
         };
@@ -433,6 +445,7 @@ pub fn vault_reveal_field(app: AppHandle, id: String, field_id: String) -> Res<S
 pub struct Totp {
     code: String,
     remaining: u64,
+    period: u64,
 }
 
 #[tauri::command(async)]
@@ -441,9 +454,9 @@ pub fn vault_totp(app: AppHandle, id: String, field_id: String) -> Res<Totp> {
     st.with_key(|k| {
         let e = vault::get(&st.db(), k, &id)?;
         let f = e.payload.fields.iter().find(|f| f.id == field_id).ok_or("Field not found")?;
-        let secret = vault::totp::parse_secret(&f.value).ok_or("Invalid one-time code secret")?;
-        let (code, remaining) = vault::totp::code(&secret, (now_ms() / 1000) as u64);
-        Ok(Totp { code, remaining })
+        let totp = vault::totp::parse(&f.value).ok_or("Invalid or unsupported one-time code secret")?;
+        let (code, remaining) = vault::totp::code(&totp, (now_ms() / 1000) as u64);
+        Ok(Totp { code, remaining, period: totp.period })
     })
 }
 
@@ -464,7 +477,7 @@ pub async fn vault_import(app: AppHandle, path: String, password: String) -> Res
     let st = state(&app);
     let raw = std::fs::read(&path).map_err(err)?;
     let backup: vault::Backup = serde_json::from_slice(&raw).map_err(|_| "This is not a Pastora vault backup")?;
-    if st.vault_key.lock().unwrap().is_none() {
+    if st.vault_key.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
         return Err("LOCKED".into());
     }
     let bkey = vault::open_backup(&backup, &password)?;
@@ -654,10 +667,17 @@ pub fn import_data(app: AppHandle, path: String) -> Res<usize> {
     let st = state(&app);
     let raw = std::fs::read(&path).map_err(err)?;
     let f: ExportFile = serde_json::from_slice(&raw).map_err(|_| "This is not a Pastora export file")?;
+    // Exports only contain text and file pins; anything else (e.g. an image pin without its
+    // image) couldn't be pasted. One transaction: a failure imports none of them.
     let mut n = 0;
-    for p in f.pins.iter().rev() {
-        pins::add(&st.db(), p.label.as_deref(), &p.kind, &p.content, None, (None, None)).map_err(err)?;
-        n += 1;
+    {
+        let db = st.db();
+        let tx = db.unchecked_transaction().map_err(err)?;
+        for p in f.pins.iter().rev().filter(|p| matches!(p.kind.as_str(), "text" | "files") && !p.content.trim().is_empty()) {
+            pins::add(&tx, p.label.as_deref(), &p.kind, &p.content, None, (None, None)).map_err(err)?;
+            n += 1;
+        }
+        tx.commit().map_err(err)?;
     }
     let mut s = f.settings;
     s.onboarded = true;

@@ -183,7 +183,7 @@ export const api = {
     invoke<{ clearSeconds: number }>("vault_copy_field", { id, fieldId, paste }),
   vaultRevealField: (id: string, fieldId: string) => invoke<string>("vault_reveal_field", { id, fieldId }),
   vaultTotp: (id: string, fieldId: string) =>
-    invoke<{ code: string; remaining: number }>("vault_totp", { id, fieldId }),
+    invoke<{ code: string; remaining: number; period: number }>("vault_totp", { id, fieldId }),
   vaultPasteLogin: (id: string, userField: string, passField: string) =>
     invoke<void>("vault_paste_login", { id, userField, passField }),
   vaultExport: (path: string) => invoke<void>("vault_export", { path }),

@@ -8,9 +8,11 @@ use crate::state::{emit, state};
 use crate::{settings, tray};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
+use sha2::{Digest, Sha256};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const RELEASES: &str = "https://github.com/pankaj1980patel/pastora/releases";
@@ -51,8 +53,43 @@ pub struct UpdateStatus {
     pub dismissed: bool,
 }
 
-/// The update found by the last check, and its downloaded (verified) package.
-static PENDING: Mutex<Option<(Update, Option<Vec<u8>>)>> = Mutex::new(None);
+/// A downloaded, signature-checked package, kept on disk (it's 10–20 MB) rather than in
+/// memory until the user restarts. The hash detects a file changed after verification.
+#[derive(Clone)]
+struct Downloaded {
+    path: PathBuf,
+    sha256: [u8; 32],
+}
+
+/// The update found by the last check, and its downloaded package.
+static PENDING: Mutex<Option<(Update, Option<Downloaded>)>> = Mutex::new(None);
+
+fn cache_dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join("updates"))
+}
+
+/// Deletes downloaded packages: left over from an earlier run (already installed, or
+/// superseded) or replaced by a newer release.
+fn clear_cache(app: &AppHandle) {
+    if let Some(dir) = cache_dir(app) {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+fn save_package(dir: &std::path::Path, version: &str, bytes: &[u8]) -> Result<Downloaded, String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let path = dir.join(format!("Pastora-{version}.update"));
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(Downloaded { path, sha256: Sha256::digest(bytes).into() })
+}
+
+fn read_package(d: &Downloaded) -> Result<Vec<u8>, String> {
+    let bytes = std::fs::read(&d.path).map_err(|e| e.to_string())?;
+    if <[u8; 32]>::from(Sha256::digest(&bytes)) != d.sha256 {
+        return Err("the downloaded file changed on disk".into());
+    }
+    Ok(bytes)
+}
 /// A download or install is running.
 static BUSY: AtomicBool = AtomicBool::new(false);
 
@@ -74,7 +111,7 @@ fn changed(app: &AppHandle) {
 }
 
 fn set_stage(app: &AppHandle, stage: Stage, error: Option<String>) {
-    if let Some(u) = state(app).update.lock().unwrap().as_mut() {
+    if let Some(u) = state(app).update.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
         u.stage = stage;
         u.error = error;
     }
@@ -87,14 +124,14 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
     let found = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
     let Some(update) = found else {
         if !BUSY.load(Ordering::SeqCst) {
-            *PENDING.lock().unwrap() = None;
-            *state(app).update.lock().unwrap() = None;
+            *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            *state(app).update.lock().unwrap_or_else(|e| e.into_inner()) = None;
             changed(app);
         }
         return Ok(None);
     };
     let version = update.version.clone();
-    let known = state(app).update.lock().unwrap().clone().filter(|u| u.version == version);
+    let known = state(app).update.lock().unwrap_or_else(|e| e.into_inner()).clone().filter(|u| u.version == version);
     let info = match known {
         // Already found earlier: keep its download and progress.
         Some(u) => u,
@@ -106,8 +143,9 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
                 stage: Stage::Available,
                 error: None,
             };
-            *PENDING.lock().unwrap() = Some((update, None));
-            *state(app).update.lock().unwrap() = Some(info.clone());
+            *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some((update, None));
+            clear_cache(app); // a package for an older release is no longer needed
+            *state(app).update.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
             changed(app);
             info
         }
@@ -134,7 +172,7 @@ async fn download(app: &AppHandle) -> Result<(), String> {
 }
 
 async fn download_inner(app: &AppHandle) -> Result<(), String> {
-    let update = match PENDING.lock().unwrap().as_ref() {
+    let update = match PENDING.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
         None => return Err("No update to download.".into()),
         Some((_, Some(_))) => return Ok(()), // already downloaded
         Some((u, None)) => u.clone(),
@@ -142,11 +180,23 @@ async fn download_inner(app: &AppHandle) -> Result<(), String> {
     set_stage(app, Stage::Downloading, None);
     match update.download(|_, _| {}, || {}).await {
         Ok(bytes) => {
-            if let Some(p) = PENDING.lock().unwrap().as_mut().filter(|(u, _)| u.version == update.version) {
-                p.1 = Some(bytes);
+            let saved = cache_dir(app).ok_or_else(|| "no cache folder".to_string())
+                .and_then(|dir| save_package(&dir, &update.version, &bytes));
+            drop(bytes);
+            match saved {
+                Ok(d) => {
+                    if let Some(p) = PENDING.lock().unwrap_or_else(|e| e.into_inner()).as_mut().filter(|(u, _)| u.version == update.version) {
+                        p.1 = Some(d);
+                    }
+                    set_stage(app, Stage::Ready, None);
+                    Ok(())
+                }
+                Err(e) => {
+                    let e = format!("Couldn't save the update: {e}");
+                    set_stage(app, Stage::Failed, Some(e.clone()));
+                    Err(e)
+                }
             }
-            set_stage(app, Stage::Ready, None);
-            Ok(())
         }
         Err(e) => {
             set_stage(app, Stage::Failed, Some(e.to_string()));
@@ -159,8 +209,19 @@ async fn download_inner(app: &AppHandle) -> Result<(), String> {
 /// On Windows the installer closes the app and opens it again when it's done.
 pub async fn install(app: &AppHandle) -> Result<(), String> {
     download(app).await?;
-    let Some((update, Some(bytes))) = PENDING.lock().unwrap().clone() else {
+    let Some((update, Some(downloaded))) = PENDING.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
         return Err("The update isn't downloaded.".into());
+    };
+    let bytes = match read_package(&downloaded) {
+        Ok(b) => b,
+        Err(e) => {
+            // Forget it, so the next attempt downloads (and verifies) it again.
+            if let Some(p) = PENDING.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+                p.1 = None;
+            }
+            set_stage(app, Stage::Failed, Some(e.clone()));
+            return Err(format!("Couldn't install the update: {e}. Try again."));
+        }
     };
     set_stage(app, Stage::Installing, None);
     let app2 = app.clone();
@@ -182,7 +243,7 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
 
 /// Tray menu "Update…": install when possible, otherwise open the download.
 pub fn tray_clicked(app: &AppHandle) {
-    let info = state(app).update.lock().unwrap().clone();
+    let info = state(app).update.lock().unwrap_or_else(|e| e.into_inner()).clone();
     match info {
         Some(u) if u.stage == Stage::Failed => crate::platform::open_path(std::path::Path::new(&u.url)),
         Some(_) => {
@@ -199,7 +260,7 @@ pub fn tray_clicked(app: &AppHandle) {
 
 pub fn status(app: &AppHandle) -> UpdateStatus {
     let st = state(app);
-    let update = st.update.lock().unwrap().clone();
+    let update = st.update.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let dismissed = update
         .as_ref()
         .map(|u| settings::get_meta(&st.db(), DISMISSED).as_deref() == Some(u.version.as_str()))
@@ -216,6 +277,7 @@ pub fn spawn(app: AppHandle) {
     std::thread::Builder::new()
         .name("updates".into())
         .spawn(move || {
+            clear_cache(&app);
             std::thread::sleep(Duration::from_secs(10));
             loop {
                 if state(&app).settings().check_updates {
@@ -236,5 +298,15 @@ mod tests {
     fn manual_download_matches_release_names() {
         let url = super::download_url("1.2.3");
         assert!(url.starts_with("https://github.com/pankaj1980patel/pastora/releases/download/v1.2.3/Pastora_1.2.3_"));
+    }
+
+    #[test]
+    fn package_on_disk_round_trips_and_detects_changes() {
+        let dir = std::env::temp_dir().join(format!("pastora-update-test-{}", std::process::id()));
+        let d = super::save_package(&dir, "9.9.9", b"signed package bytes").unwrap();
+        assert_eq!(super::read_package(&d).unwrap(), b"signed package bytes");
+        std::fs::write(&d.path, b"swapped after verification").unwrap();
+        assert!(super::read_package(&d).is_err());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
