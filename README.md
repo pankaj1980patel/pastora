@@ -108,7 +108,7 @@ From 0.1.3 on, Pastora updates itself. When a new version is out it downloads in
 - To choose when to download, turn off **Settings → General → Download updates automatically**: the banner then shows an **Update** button instead.
 - To stop checking altogether, turn off **Check for updates** in the same place.
 - If an update can't be installed in place, Pastora links to the download instead. Older versions update by installing the new release over them.
-- **macOS:** from 0.1.6 on, releases are signed with the same certificate every time, so the Accessibility permission (and Touch ID unlock) carries over to each update. Updating to 0.1.6 itself asks for Accessibility one last time.
+- **macOS:** from 0.1.6 on, releases are signed with the same certificate every time, so the Accessibility permission (and Touch ID unlock) carries over to each update (confirmed with the 0.1.6 → 0.1.7 update). Updating to 0.1.6 itself asks for Accessibility one last time.
 
 ## Build from source
 
