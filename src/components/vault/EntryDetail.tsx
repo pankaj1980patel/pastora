@@ -15,7 +15,7 @@ interface Props {
 }
 
 function TotpValue({ entryId, field }: { entryId: string; field: FieldSummary }) {
-  const [code, setCode] = useState<{ code: string; remaining: number; period: number } | null>(null);
+  const [code, setCode] = useState<{ code: string; remaining: number; period: number; n: number } | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {
     let alive = true;
@@ -27,7 +27,8 @@ function TotpValue({ entryId, field }: { entryId: string; field: FieldSummary })
         .vaultTotp(entryId, field.id)
         .then((c) => {
           if (!alive) return;
-          setCode(c);
+          // `n` restarts the ring each period, even if the new code equals the last one.
+          setCode((prev) => ({ ...c, n: (prev?.n ?? 0) + 1 }));
           const periodMs = c.period * 1000;
           timer = window.setTimeout(tick, periodMs - (Date.now() % periodMs) + 50);
         })
@@ -45,7 +46,7 @@ function TotpValue({ entryId, field }: { entryId: string; field: FieldSummary })
     <span className="flex items-center gap-2 font-mono tracking-widest">
       {code.code.slice(0, half)} {code.code.slice(half)}
       <span className={code.remaining <= 5 ? "text-red-500" : "text-neutral-400"}>
-        <Countdown key={code.code} seconds={code.period} initial={code.remaining} size={13} />
+        <Countdown key={code.n} seconds={code.period} initial={code.remaining} size={13} />
       </span>
     </span>
   );

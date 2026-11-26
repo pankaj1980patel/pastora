@@ -53,20 +53,30 @@ mod bound {
         o
     }
 
-    /// Ok(true) stored, Ok(false) not supported for this build (falls back), Err otherwise.
-    pub fn store(key: &[u8]) -> Result<bool, String> {
+    /// true: stored. false: not possible here (ad-hoc signed build, no passcode, …), so the
+    /// caller uses the app-gated item, which still works; turning Touch ID on must not fail.
+    pub fn store(key: &[u8]) -> bool {
         let _ = passwords::delete_generic_password_options(options());
-        let ac = SecAccessControl::create_with_protection(
+        let ac = match SecAccessControl::create_with_protection(
             Some(ProtectionMode::AccessibleWhenPasscodeSetThisDeviceOnly),
             AccessControlOptions::BIOMETRY_CURRENT_SET.bits(),
-        )
-        .map_err(|e| e.to_string())?;
+        ) {
+            Ok(ac) => ac,
+            Err(e) => {
+                log::warn!("biometry access control unavailable: {e}");
+                return false;
+            }
+        };
         let mut o = options();
         o.set_access_control(ac);
         match passwords::set_generic_password_options(key, o) {
-            Ok(()) => Ok(true),
-            Err(e) if e.code() == MISSING_ENTITLEMENT => Ok(false),
-            Err(e) => Err(e.to_string()),
+            Ok(()) => true,
+            Err(e) => {
+                if e.code() != MISSING_ENTITLEMENT {
+                    log::warn!("biometry-bound keychain item unavailable ({})", e.code());
+                }
+                false
+            }
         }
     }
 
@@ -92,7 +102,7 @@ mod bound {
 /// the biometric check (biometry-bound item), false when Pastora's own check does.
 pub fn store(key: &Key) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
-    if bound::store(key.as_ref())? {
+    if bound::store(key.as_ref()) {
         delete_app_gated();
         return Ok(true);
     }
