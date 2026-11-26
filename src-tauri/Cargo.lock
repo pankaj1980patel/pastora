@@ -3051,6 +3051,8 @@ dependencies = [
  "rand",
  "regex",
  "rusqlite",
+ "security-framework 3.7.0",
+ "security-framework-sys",
  "serde",
  "serde_json",
  "sha1",
@@ -3064,6 +3066,7 @@ dependencies = [
  "tauri-plugin-updater",
  "uuid",
  "windows-sys 0.59.0",
+ "x11rb",
  "zeroize",
 ]
 

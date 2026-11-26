@@ -8,8 +8,8 @@ use tauri::{AppHandle, Emitter};
 
 pub fn lock_vault(app: &AppHandle) {
     let st = state(app);
-    let was_unlocked = st.vault_key.lock().unwrap().take().is_some();
-    *st.pending_sequence.lock().unwrap() = None;
+    let was_unlocked = st.vault_key.lock().unwrap_or_else(|e| e.into_inner()).take().is_some();
+    *st.pending_sequence.lock().unwrap_or_else(|e| e.into_inner()) = None;
     // Don't leave a copied secret on the clipboard once the vault is locked.
     let sc = st.secret_change.load(Ordering::SeqCst);
     if sc >= 0 && platform::change_count() == sc {
@@ -95,7 +95,7 @@ pub fn start_sequence(app: &AppHandle, entry_id: &str, user_field: &str, pass_fi
         e.payload.fields.iter().find(|f| f.id == user_field).map(|f| f.value.clone()).ok_or("Field not found".into())
     })?;
     write_plain(app, &user);
-    *st.pending_sequence.lock().unwrap() =
+    *st.pending_sequence.lock().unwrap_or_else(|e| e.into_inner()) =
         Some(PendingSequence { entry_id: entry_id.into(), field_id: pass_field.into(), created: Instant::now() });
     deliver(app, true);
     Ok(())
@@ -104,7 +104,7 @@ pub fn start_sequence(app: &AppHandle, entry_id: &str, user_field: &str, pass_fi
 /// Called on the open-popup hotkey. Returns true if it pasted a queued password instead.
 pub fn continue_sequence(app: &AppHandle) -> bool {
     let st = state(app);
-    let Some(seq) = st.pending_sequence.lock().unwrap().take() else { return false };
+    let Some(seq) = st.pending_sequence.lock().unwrap_or_else(|e| e.into_inner()).take() else { return false };
     if seq.created.elapsed() > Duration::from_secs(120) {
         return false;
     }
@@ -141,9 +141,9 @@ pub fn spawn_background(app: AppHandle) {
                 let slept = wall.duration_since(last_wall).map(|d| d > Duration::from_secs(20)).unwrap_or(false);
                 last_wall = wall;
 
-                let unlocked = st.vault_key.lock().unwrap().is_some();
+                let unlocked = st.vault_key.lock().unwrap_or_else(|e| e.into_inner()).is_some();
                 if unlocked {
-                    let idle = st.vault_activity.lock().unwrap().elapsed();
+                    let idle = st.vault_activity.lock().unwrap_or_else(|e| e.into_inner()).elapsed();
                     let idle_lock = s.auto_lock_minutes > 0 && idle > Duration::from_secs(s.auto_lock_minutes as u64 * 60);
                     let sleep_lock = s.lock_on_sleep && (slept || platform::screen_locked());
                     if idle_lock || sleep_lock {

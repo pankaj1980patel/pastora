@@ -114,7 +114,8 @@ pub fn is_initialized(conn: &Connection) -> bool {
         .is_some()
 }
 
-struct Meta {
+/// The vault key wrapped by the master password (the `vault_meta` row).
+pub struct Meta {
     salt: Vec<u8>,
     m: u32,
     t: u32,
@@ -123,7 +124,7 @@ struct Meta {
     wrapped: Vec<u8>,
 }
 
-fn load_meta(conn: &Connection) -> Result<Meta, String> {
+pub fn load_meta(conn: &Connection) -> Result<Meta, String> {
     conn.query_row(
         "SELECT salt, m_cost, t_cost, p_cost, wrap_nonce, wrapped_key FROM vault_meta WHERE id = 1",
         [],
@@ -136,19 +137,62 @@ fn load_meta(conn: &Connection) -> Result<Meta, String> {
     .ok_or_else(|| "Secure Clips is not set up yet".to_string())
 }
 
-fn write_meta(conn: &Connection, password: &str, key: &Key) -> Result<(), String> {
+// The functions marked "slow" run Argon2 (~125 ms, 64 MiB). Callers holding the shared
+// database connection should read with `load_meta`, release the lock, derive, then write.
+
+/// Wraps `key` with a fresh salt under `password`. Slow.
+pub fn wrap_key(password: &str, key: &Key) -> Result<Meta, String> {
     let salt = crypto::random_salt();
     let kek = crypto::derive_kek(password, &salt, crypto::M_COST, crypto::T_COST, crypto::P_COST)?;
     let (nonce, wrapped) = crypto::seal(&kek, key.as_ref(), b"vault-key");
+    Ok(Meta { salt: salt.to_vec(), m: crypto::M_COST, t: crypto::T_COST, p: crypto::P_COST, nonce, wrapped })
+}
+
+/// Recovers the vault key from `meta` with the master password. Slow.
+pub fn unwrap_key(m: &Meta, password: &str) -> Result<Key, String> {
+    let kek = crypto::derive_kek(password, &m.salt, m.m, m.t, m.p)?;
+    let raw = crypto::open(&kek, &m.nonce, &m.wrapped, b"vault-key").map_err(|_| "Wrong password".to_string())?;
+    crypto::key_from_slice(&raw)
+}
+
+/// A new random vault key and its wrapped form. Slow.
+pub fn new_vault(password: &str) -> Result<(Key, Meta), String> {
+    validate_password(password)?;
+    let key = crypto::random_key();
+    let meta = wrap_key(password, &key)?;
+    Ok((key, meta))
+}
+
+/// Stores the metadata of a new vault. Fails if one exists, so two setups racing can't
+/// leave the second one's key in memory with the first one's metadata on disk.
+pub fn insert_meta(conn: &Connection, m: &Meta) -> Result<(), String> {
     conn.execute(
         "INSERT INTO vault_meta(id, salt, m_cost, t_cost, p_cost, wrap_nonce, wrapped_key, created_at)
-         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
-         ON CONFLICT(id) DO UPDATE SET salt = excluded.salt, m_cost = excluded.m_cost,
-           t_cost = excluded.t_cost, p_cost = excluded.p_cost, wrap_nonce = excluded.wrap_nonce,
-           wrapped_key = excluded.wrapped_key",
-        params![salt.to_vec(), crypto::M_COST, crypto::T_COST, crypto::P_COST, nonce, wrapped, now_ms()],
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![m.salt, m.m, m.t, m.p, m.nonce, m.wrapped, now_ms()],
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| match e {
+        rusqlite::Error::SqliteFailure(f, _) if f.code == rusqlite::ErrorCode::ConstraintViolation => {
+            "Secure Clips is already set up".to_string()
+        }
+        e => e.to_string(),
+    })?;
+    Ok(())
+}
+
+/// Replaces `old` with `new` (new master password, same vault key). Fails if the
+/// metadata changed since `old` was read, e.g. the vault was reset and set up again.
+pub fn replace_meta(conn: &Connection, old: &Meta, new: &Meta) -> Result<(), String> {
+    let n = conn
+        .execute(
+            "UPDATE vault_meta SET salt = ?1, m_cost = ?2, t_cost = ?3, p_cost = ?4, wrap_nonce = ?5, wrapped_key = ?6
+             WHERE id = 1 AND wrap_nonce = ?7 AND wrapped_key = ?8",
+            params![new.salt, new.m, new.t, new.p, new.nonce, new.wrapped, old.nonce, old.wrapped],
+        )
+        .map_err(|e| e.to_string())?;
+    if n == 0 {
+        return Err("Secure Clips changed in the meantime. Try again.".into());
+    }
     Ok(())
 }
 
@@ -159,27 +203,27 @@ pub fn validate_password(password: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 pub fn setup(conn: &Connection, password: &str) -> Result<Key, String> {
     if is_initialized(conn) {
         return Err("Secure Clips is already set up".into());
     }
-    validate_password(password)?;
-    let key = crypto::random_key();
-    write_meta(conn, password, &key)?;
+    let (key, meta) = new_vault(password)?;
+    insert_meta(conn, &meta)?;
     Ok(key)
 }
 
+#[cfg(test)]
 pub fn unlock(conn: &Connection, password: &str) -> Result<Key, String> {
-    let m = load_meta(conn)?;
-    let kek = crypto::derive_kek(password, &m.salt, m.m, m.t, m.p)?;
-    let raw = crypto::open(&kek, &m.nonce, &m.wrapped, b"vault-key").map_err(|_| "Wrong password".to_string())?;
-    crypto::key_from_slice(&raw)
+    unwrap_key(&load_meta(conn)?, password)
 }
 
+#[cfg(test)]
 pub fn change_password(conn: &Connection, old: &str, new: &str) -> Result<Key, String> {
     validate_password(new)?;
-    let key = unlock(conn, old).map_err(|_| "Current password is wrong".to_string())?;
-    write_meta(conn, new, &key)?;
+    let meta = load_meta(conn)?;
+    let key = unwrap_key(&meta, old).map_err(|_| "Current password is wrong".to_string())?;
+    replace_meta(conn, &meta, &wrap_key(new, &key)?)?;
     Ok(key)
 }
 
@@ -246,7 +290,18 @@ pub fn save(conn: &Connection, key: &Key, mut e: Entry) -> Result<String, String
     let json = zeroize::Zeroizing::new(serde_json::to_vec(&e.payload).map_err(|err| err.to_string())?);
     let (nonce, ct) = crypto::seal(key, &json, e.id.as_bytes());
     let now = now_ms();
-    if is_new {
+    let updated = if is_new {
+        0
+    } else {
+        conn.execute(
+            "UPDATE vault_entries SET template = ?2, nonce = ?3, payload = ?4, favorite = ?5, updated_at = ?6
+             WHERE id = ?1",
+            params![e.id, e.template, nonce, ct, e.favorite, now],
+        )
+        .map_err(|err| err.to_string())?
+    };
+    // New, or edited while it was deleted elsewhere: insert, so what the user typed isn't lost.
+    if updated == 0 {
         let top: f64 = conn
             .query_row("SELECT COALESCE(MIN(position), 1.0) FROM vault_entries", [], |r| r.get(0))
             .map_err(|err| err.to_string())?;
@@ -255,14 +310,8 @@ pub fn save(conn: &Connection, key: &Key, mut e: Entry) -> Result<String, String
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![e.id, e.template, nonce, ct, top - 1.0, e.favorite, now],
         )
-    } else {
-        conn.execute(
-            "UPDATE vault_entries SET template = ?2, nonce = ?3, payload = ?4, favorite = ?5, updated_at = ?6
-             WHERE id = ?1",
-            params![e.id, e.template, nonce, ct, e.favorite, now],
-        )
+        .map_err(|err| err.to_string())?;
     }
-    .map_err(|err| err.to_string())?;
     Ok(e.id)
 }
 
@@ -364,15 +413,19 @@ pub fn import(conn: &Connection, key: &Key, backup: &Backup, password: &str) -> 
 }
 
 /// Re-encrypts a backup's entries (unwrapped with `open_backup`) into this vault.
+/// All or nothing: a corrupt entry imports none, so retrying doesn't create duplicates.
 pub fn import_with_key(conn: &Connection, key: &Key, backup: &Backup, bkey: &Key) -> Result<usize, String> {
     let dec = |s: &str| B64.decode(s).map_err(|_| "Backup file is corrupt".to_string());
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     let mut n = 0;
     for be in backup.entries.iter().rev() {
-        let mut e = decrypt_row(bkey, &be.id, be.template.clone(), &dec(&be.nonce)?, &dec(&be.payload)?, be.favorite, be.updated_at)?;
+        let mut e = decrypt_row(bkey, &be.id, be.template.clone(), &dec(&be.nonce)?, &dec(&be.payload)?, be.favorite, be.updated_at)
+            .map_err(|_| "Backup file is corrupt".to_string())?;
         e.id = String::new(); // always import as a new entry
-        save(conn, key, e)?;
+        save(&tx, key, e)?;
         n += 1;
     }
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(n)
 }
 
@@ -439,5 +492,64 @@ mod tests {
         assert_eq!(import(&b, &kb, &parsed, "password-a").unwrap(), 2);
         let titles: Vec<_> = list(&b, &kb).unwrap().into_iter().map(|e| e.payload.title).collect();
         assert_eq!(titles, vec!["Two", "One"]); // same order as the source vault
+    }
+
+    #[test]
+    fn backup_rejects_absurd_kdf_params() {
+        let a = crate::db::memory();
+        setup(&a, "password-a").unwrap();
+        let mut backup = export(&a).unwrap();
+        // ~4 TiB of Argon2 memory: must be refused before allocating, not abort the app.
+        backup.m_cost = u32::MAX;
+        assert_eq!(open_backup(&backup, "password-a").unwrap_err(), "Unsupported key derivation settings");
+        backup.m_cost = crypto::M_COST;
+        backup.t_cost = 4_000_000_000;
+        assert!(open_backup(&backup, "password-a").is_err());
+        backup.t_cost = crypto::T_COST;
+        assert!(open_backup(&backup, "password-a").is_ok());
+    }
+
+    #[test]
+    fn save_recreates_missing_entry() {
+        let conn = crate::db::memory();
+        let key = setup(&conn, "correct horse").unwrap();
+        let id = save(&conn, &key, login("GitHub")).unwrap();
+        let mut e = get(&conn, &key, &id).unwrap();
+        delete(&conn, &id).unwrap(); // deleted elsewhere while the editor was open
+        e.payload.title = "GitHub (edited)".into();
+        assert_eq!(save(&conn, &key, e).unwrap(), id);
+        assert_eq!(get(&conn, &key, &id).unwrap().payload.title, "GitHub (edited)");
+    }
+
+    #[test]
+    fn import_is_all_or_nothing() {
+        let a = crate::db::memory();
+        let ka = setup(&a, "password-a").unwrap();
+        save(&a, &ka, login("One")).unwrap();
+        save(&a, &ka, login("Two")).unwrap();
+        let mut backup = export(&a).unwrap();
+        backup.entries[0].payload = B64.encode(b"tampered"); // imported last (reverse order)
+
+        let b = crate::db::memory();
+        let kb = setup(&b, "password-b").unwrap();
+        assert!(import(&b, &kb, &backup, "password-a").is_err());
+        assert!(list(&b, &kb).unwrap().is_empty(), "nothing imported from a corrupt backup");
+    }
+
+    #[test]
+    fn second_setup_and_stale_password_change_fail() {
+        let conn = crate::db::memory();
+        let key = setup(&conn, "correct horse").unwrap();
+        // A second setup that read "not initialized" before the first one wrote.
+        let (_, other) = new_vault("battery staple").unwrap();
+        assert_eq!(insert_meta(&conn, &other).unwrap_err(), "Secure Clips is already set up");
+        assert_eq!(unlock(&conn, "correct horse").unwrap().as_ref(), key.as_ref());
+
+        // A password change based on metadata that has since been replaced.
+        let stale = load_meta(&conn).unwrap();
+        change_password(&conn, "correct horse", "new password 1").unwrap();
+        let next = wrap_key("new password 2", &key).unwrap();
+        assert!(replace_meta(&conn, &stale, &next).is_err());
+        assert!(unlock(&conn, "new password 1").is_ok());
     }
 }

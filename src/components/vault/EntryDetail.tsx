@@ -15,29 +15,37 @@ interface Props {
 }
 
 function TotpValue({ entryId, field }: { entryId: string; field: FieldSummary }) {
-  const [code, setCode] = useState<{ code: string; remaining: number } | null>(null);
+  const [code, setCode] = useState<{ code: string; remaining: number; period: number } | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {
     let alive = true;
+    let timer: number | undefined;
+    // The code only changes at the end of each period: fetch it then, not every second
+    // (each fetch decrypts the entry and counts as vault activity for auto-lock).
     const tick = () =>
       api
         .vaultTotp(entryId, field.id)
-        .then((c) => alive && setCode(c))
+        .then((c) => {
+          if (!alive) return;
+          setCode(c);
+          const periodMs = c.period * 1000;
+          timer = window.setTimeout(tick, periodMs - (Date.now() % periodMs) + 50);
+        })
         .catch((e) => alive && setErr(errorText(e)));
     tick();
-    const t = setInterval(tick, 1000);
     return () => {
       alive = false;
-      clearInterval(t);
+      window.clearTimeout(timer);
     };
   }, [entryId, field.id]);
   if (err) return <span className="text-red-500">{err}</span>;
   if (!code) return <span>…</span>;
+  const half = Math.floor(code.code.length / 2);
   return (
     <span className="flex items-center gap-2 font-mono tracking-widest">
-      {code.code.slice(0, 3)} {code.code.slice(3)}
+      {code.code.slice(0, half)} {code.code.slice(half)}
       <span className={code.remaining <= 5 ? "text-red-500" : "text-neutral-400"}>
-        <Countdown key={code.code} seconds={30} initial={code.remaining} size={13} />
+        <Countdown key={code.code} seconds={code.period} initial={code.remaining} size={13} />
       </span>
     </span>
   );

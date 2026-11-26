@@ -9,7 +9,7 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     if event.state != ShortcutState::Pressed {
         return;
     }
-    let action = state(app).shortcut_map.lock().unwrap().get(&shortcut.id()).copied();
+    let action = state(app).shortcut_map.lock().unwrap_or_else(|e| e.into_inner()).get(&shortcut.id()).copied();
     match action {
         Some(Action::OpenPopup) => {
             if !actions::continue_sequence(app) {
@@ -55,6 +55,6 @@ pub fn apply(app: &AppHandle, sc: &Shortcuts) -> Result<(), String> {
         }
         map.insert(s.id(), *action);
     }
-    *state(app).shortcut_map.lock().unwrap() = map;
+    *state(app).shortcut_map.lock().unwrap_or_else(|e| e.into_inner()) = map;
     Ok(())
 }

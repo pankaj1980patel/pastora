@@ -87,7 +87,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
 
-    *state(app).tray.lock().unwrap() =
+    *state(app).tray.lock().unwrap_or_else(|e| e.into_inner()) =
         Some(TrayHandles { menu, pause, autostart, access, update, shown_access: false, shown_update: false });
     refresh(app);
     Ok(())
@@ -95,12 +95,22 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 
 /// Syncs the check marks with the current settings, and shows the "Allow Accessibility"
 /// and "Update available" items only when they apply.
+///
+/// Always runs on the main thread (inline when already there, otherwise queued without
+/// waiting). Off the main thread Tauri's menu setters block until the main thread runs them,
+/// so holding the `tray` lock across them from a background thread could deadlock with a
+/// main-thread caller waiting for that lock.
 pub fn refresh(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || refresh_now(&handle));
+}
+
+fn refresh_now(app: &AppHandle) {
     let st = state(app);
     let s = st.settings();
-    let update = st.update.lock().unwrap().clone();
+    let update = st.update.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let need_access = cfg!(target_os = "macos") && s.auto_paste && !crate::platform::accessibility_trusted(false);
-    let mut tray = st.tray.lock().unwrap();
+    let mut tray = st.tray.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(t) = tray.as_mut() {
         let _ = t.pause.set_checked(s.is_paused(crate::db::now_ms()));
         let _ = t.autostart.set_checked(s.launch_at_login);

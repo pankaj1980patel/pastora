@@ -22,7 +22,8 @@ export function generatePassword(o: GenOptions): string {
     const n = Math.max(3, Math.min(10, o.length));
     const words = Array.from({ length: n }, () => WORDS[randInt(WORDS.length)]);
     if (o.numbers) words[randInt(n)] += String(randInt(10));
-    return words.join(o.symbols ? "-" : " ").replace(/ /g, "-");
+    // "Dashes" off: words run together (a space would be easy to lose when pasting).
+    return words.join(o.symbols ? "-" : "");
   }
   const lower = "abcdefghijkmnopqrstuvwxyz";
   const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";

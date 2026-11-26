@@ -23,7 +23,16 @@ pub fn random_salt() -> [u8; 16] {
     s
 }
 
+/// Cost limits accepted when deriving. Parameters can come from a backup file the user
+/// imports, so absurd values (terabytes of memory, billions of passes) must not reach Argon2.
+const M_RANGE: std::ops::RangeInclusive<u32> = 8 * 1024..=1024 * 1024; // 8 MiB – 1 GiB
+const T_RANGE: std::ops::RangeInclusive<u32> = 1..=16;
+const P_RANGE: std::ops::RangeInclusive<u32> = 1..=16;
+
 pub fn derive_kek(password: &str, salt: &[u8], m: u32, t: u32, p: u32) -> Result<Key, String> {
+    if !M_RANGE.contains(&m) || !T_RANGE.contains(&t) || !P_RANGE.contains(&p) {
+        return Err("Unsupported key derivation settings".into());
+    }
     let params = Params::new(m, t, p, Some(32)).map_err(|e| e.to_string())?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut out = Zeroizing::new([0u8; 32]);
