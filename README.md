@@ -107,6 +107,7 @@ From 0.1.3 on, Pastora updates itself. When a new version is out it downloads in
 - To choose when to download, turn off **Settings → General → Download updates automatically**: the banner then shows an **Update** button instead.
 - To stop checking altogether, turn off **Check for updates** in the same place.
 - If an update can't be installed in place, Pastora links to the download instead. Older versions update by installing the new release over them.
+- **macOS:** from 0.1.6 on, releases are signed with the same certificate every time, so the Accessibility permission (and Touch ID unlock) carries over to each update. Updating to 0.1.6 itself asks for Accessibility one last time.
 
 ## Build from source
 
@@ -129,6 +130,10 @@ cd src-tauri && cargo test # run the Rust unit tests
    It also signs the update packages and writes `latest.json`, which installed copies update from. Signing uses the
    `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets; the matching public key is in
    `tauri.conf.json`. Keep a backup of the private key: without it, no update can reach installed copies.
+4. The macOS app is signed with the project's self-signed certificate ("Pastora Code Signing"), from the
+   `MACOS_CERTIFICATE` (base64 `.p12`) and `MACOS_CERTIFICATE_PASSWORD` secrets. macOS keeps an app's permissions only
+   while its signing identity stays the same, so always sign with this certificate: the workflow fails if the app's
+   identity changes. Local builds stay ad-hoc signed.
 
 ## Keyboard shortcuts
 

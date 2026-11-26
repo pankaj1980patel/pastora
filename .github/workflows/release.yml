@@ -54,14 +54,54 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
       - run: npm ci
+      # macOS keeps permissions (Accessibility, the Touch ID keychain item) for an app whose
+      # signature identity stays the same. Ad-hoc signatures change with every build, so each
+      # update looked like a new app. Releases are signed with the project's own (self-signed)
+      # certificate instead; its hash is checked after the build below.
+      - name: Import the macOS code-signing certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          [ -n "$MACOS_CERTIFICATE" ] || { echo "::error::The MACOS_CERTIFICATE secret is missing"; exit 1; }
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          kp=$(openssl rand -hex 16)
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$kp" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kp" "$kc"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kp" "$kc" >/dev/null
+          # codesign only finds identities in keychains on the search list.
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          id=$(security find-identity -p codesigning "$kc" | awk '/"Pastora Code Signing"/ {print $2; exit}')
+          [ -n "$id" ] || { echo "::error::The signing identity was not found"; exit 1; }
+          echo "MACOS_SIGNING_IDENTITY=$id" >> "$GITHUB_ENV"
       # Update packages are only made here, where the signing key is: building from source needs no key.
       # bash on every OS: PowerShell would strip the quotes from the JSON.
-      - run: npm run tauri build -- ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+      - run: |
+          cfg='{"bundle":{"createUpdaterArtifacts":true}}'
+          if [ -n "$MACOS_SIGNING_IDENTITY" ]; then
+            cfg="{\"bundle\":{\"createUpdaterArtifacts\":true,\"macOS\":{\"signingIdentity\":\"$MACOS_SIGNING_IDENTITY\"}}}"
+          fi
+          npm run tauri build -- ${{ matrix.args }} --config "$cfg"
         shell: bash
         env:
           # Signs the update packages; the app only installs updates signed with this key.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - name: Check the macOS signature
+        if: runner.os == 'macOS'
+        run: |
+          app="${{ matrix.bundle }}/macos/Pastora.app"
+          codesign --verify --strict --deep "$app"
+          req=$(codesign -d -r- "$app" 2>&1)
+          echo "$req"
+          # Must never change: a different identity makes macOS forget the user's permissions.
+          echo "$req" | grep -q 'identifier "com.pastora.app" and certificate root = H"e7a93b367cf87ded2bd670d523dd8f229f0c6597"' \
+            || { echo "::error::Pastora.app is not signed with the project certificate"; exit 1; }
       - name: Collect files
         shell: bash
         run: |
