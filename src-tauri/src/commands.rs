@@ -302,7 +302,6 @@ pub async fn vault_unlock_biometric(app: AppHandle) -> Res<()> {
     }
     let ctx = biometric_prompt(&app, "unlock Secure Clips")?;
     let key = keychain::load(&ctx)?;
-    drop(ctx);
     // Make sure the stored key really is this vault's key.
     vault::list(&st.db(), &key).map_err(|_| "Stored key does not match. Unlock with your password.")?;
     *st.vault_key.lock().unwrap_or_else(|e| e.into_inner()) = Some(key);
